@@ -8,10 +8,10 @@ namespace NoteSpace.Controls;
 /// <summary>Reusable search settings shared by the search pane and replace dialog.</summary>
 public sealed class SearchOptionsControl : UserControl
 {
-    private readonly OfficeComboBox scope = new() { Header = "Search in", ItemsSource = new[] { "All notebooks", "This notebook", "This section", "This page" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly OfficeComboBox filter = new() { Header = "Content", ItemsSource = new[] { "All content", "Tags only", "Open to-dos", "Completed to-dos" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly OfficeCheckBox matchCase = new() { Content = "Match case", MinHeight = 28 };
-    private readonly OfficeCheckBox wholeWord = new() { Content = "Whole words", MinHeight = 28 };
+    private readonly ComboBox scope = new() { Header = "Search in", ItemsSource = new[] { "All notebooks", "This notebook", "This section", "This page" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly ComboBox filter = new() { Header = "Content", ItemsSource = new[] { "All content", "Tags only", "Open to-dos", "Completed to-dos" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly CheckBox matchCase = new() { Content = "Match case", MinHeight = 28 };
+    private readonly CheckBox wholeWord = new() { Content = "Whole words", MinHeight = 28 };
     public NoteSearchScope Scope { get => (NoteSearchScope)Math.Max(0, scope.SelectedIndex); set => scope.SelectedIndex = (int)value; }
     public NoteSearchFilter Filter { get => (NoteSearchFilter)Math.Max(0, filter.SelectedIndex); set => filter.SelectedIndex = (int)value; }
     public bool MatchCase { get => matchCase.IsChecked == true; set => matchCase.IsChecked = value; }

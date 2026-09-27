@@ -24,7 +24,8 @@ export async function tableWorkflows({ browser, output }) {
     };
     const ribbon = async (label, x, y) => {
         const button = page.getByRole('button', { name: label, exact: true }).first();
-        if (await button.isVisible().catch(() => false)) await button.click(); else await page.mouse.click(x, y);
+        // Semantic nodes are pointer-transparent; the canvas receives real input.
+        await page.mouse.click(x, y);
         await settle();
     };
     try {
@@ -86,7 +87,7 @@ export async function tableWorkflows({ browser, output }) {
         console.log(`PASS ${completed.length} table browser workflows`); return completed;
     } catch (error) {
         await page.screenshot({ path: resolve(output, 'table-failure.png') }).catch(() => {});
-        await writeFile(resolve(output, 'table-failure.json'), JSON.stringify({ stage, completed, errors, state: await state().catch(() => null), table: await saved().catch(() => null) }, null, 2));
+        await writeFile(resolve(output, 'table-failure.json'), JSON.stringify({ stage, error: String(error.stack || error), completed, errors, state: await state().catch(() => null), table: await saved().catch(() => null) }, null, 2));
         await writeFile(resolve(output, 'table-failure-dom.html'), await page.content()); throw error;
     } finally { await context.close(); }
 }

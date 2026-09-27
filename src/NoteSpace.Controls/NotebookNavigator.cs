@@ -33,6 +33,15 @@ public sealed class NotebookNavigator : UserControl
             }
         Rebuild();
     }
+    /// <summary>Reveal a newly created group without changing the selected page or persisted collapse preferences.</summary>
+    public void RevealGroup(string notebookId, string? groupId)
+    {
+        var notebook = document?.Notebooks.FirstOrDefault(n => n.Id == notebookId);
+        if (notebook is null) return;
+        collapsed.Remove(notebook.Id);
+        foreach (var id in NotebookGroups.Ancestors(notebook, groupId)) revealed.Add(id);
+        Rebuild();
+    }
     private void Request(string command, string? id = null) => CommandInvoked?.Invoke(this, new(command, id));
     private void Rebuild()
     {

@@ -11,8 +11,16 @@ export async function searchWorkflows({ browser, output }) {
     const settle = async () => { await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))); await page.waitForTimeout(250); };
     const click = async id => {
         const item = page.locator(`[xamlautomationid="${id}"]`).first();
-        await item.waitFor({ state: 'attached', timeout: 10000 }); const b = await item.boundingBox();
-        assert.ok(b && b.width > 0, `Visible ${id}`); await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await settle();
+        await item.waitFor({ state: 'attached', timeout: 10000 });
+        // Uno 6.7's semantic tree uses local rectangles for these nested panels.
+        // Real pointer input targets the measured canvas locations in this fixed
+        // 1600x1000 viewport; semantic IDs identify controls, not their geometry.
+        const point = id.startsWith('search-result-') ? [1410, 485] : {
+            'search-scope': [1440, 282], 'search-filter': [1440, 344],
+            'search-match-case': [1320, 382], 'search-whole-word': [1445, 382]
+        }[id];
+        assert.ok(point, `Known rendered control ${id}`);
+        await page.mouse.click(...point); await settle();
     };
     const result = () => page.locator('[xamlautomationid^="search-result-"]');
     const count = async expected => {
@@ -86,7 +94,7 @@ export async function searchWorkflows({ browser, output }) {
         console.log(`PASS ${completed.length} search browser workflows`); return completed;
     } catch (error) {
         await page.screenshot({ path: resolve(output, 'search-failure.png') }).catch(() => {});
-        await writeFile(resolve(output, 'search-failure.json'), JSON.stringify({ stage, completed, errors,
+        await writeFile(resolve(output, 'search-failure.json'), JSON.stringify({ stage, error: String(error.stack || error), completed, errors,
             state: await page.evaluate(() => globalThis.noteSpaceState).catch(() => null), saved: await saved().catch(() => null),
             input: await page.evaluate(() => ({ html: document.activeElement?.outerHTML, value: document.getElementById('uno-input')?.value })).catch(() => null)
         }, null, 2));

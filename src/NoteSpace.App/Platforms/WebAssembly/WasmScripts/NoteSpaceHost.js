@@ -4,6 +4,19 @@
     const databaseName = "notespace-local-v1";
     let opening;
     let dirty = false;
+    let accessibilityButtonWired = false;
+    const isolateAccessibilityActivation = () => {
+        if (accessibilityButtonWired) return;
+        const button = document.getElementById("uno-enable-accessibility");
+        if (!button) return;
+        // Uno 6.7 handles Space/Enter on its opt-in DOM button but also bubbles
+        // the key to the previously focused canvas control. Keep that activation
+        // local; do not intercept native editor or other semantic-control keys.
+        button.addEventListener("keydown", event => {
+            if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+        });
+        accessibilityButtonWired = true;
+    };
     const database = () => opening ??= new Promise((resolve, reject) => {
         const request = indexedDB.open(databaseName, 1);
         request.onupgradeneeded = () => request.result.createObjectStore("workspaces");
@@ -79,6 +92,7 @@
             setTimeout(() => URL.revokeObjectURL(url), 60000);
         },
         report(json) {
+            isolateAccessibilityActivation();
             // Read-only runtime metadata supports diagnostics and browser smoke tests.
             const state = JSON.parse(json); globalThis.noteSpaceState = Object.freeze(state);
             dirty = Boolean(state.dirty);

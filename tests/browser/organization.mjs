@@ -24,14 +24,14 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         await page.keyboard.press('Enter'); await settle();
     };
     const contextCommand = async (id, name) => {
-        const target = page.locator(`[xamlautomationid="group-${id}"]`);
-        await target.waitFor({ state: 'attached', timeout: 10000 });
-        const bounds = await target.boundingBox(); assert.ok(bounds && bounds.width > 0);
-        await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, { button: 'right' }); await settle();
+        const groups = allGroups(await saved());
+        const group = groups.find(g => g.id === id); assert.ok(group);
+        const depth = group.parentId ? 1 : 0;
+        // Fixed canvas layout; nested semantic peers report parent-local bounds.
+        await page.mouse.click(100, 413 + depth * 38, { button: 'right' }); await settle();
         const item = page.getByRole('menuitem', { name, exact: true });
         await item.waitFor({ state: 'attached', timeout: 10000 });
-        const menu = await item.boundingBox(); assert.ok(menu && menu.width > 0);
-        await page.mouse.click(menu.x + menu.width / 2, menu.y + menu.height / 2); await settle();
+        await item.focus(); await page.keyboard.press('Enter'); await settle();
     };
     // Fixed viewport matches the baseline smoke harness. Grips are at the right
     // edge of the 206px page list; rows are 38px high with a 267px starting Y.
@@ -124,22 +124,7 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         completed.push('section group rename');
 
         stage = 'ungroup-section-group';
-        // Menu items use viewport coordinates; the confirmation popup below
-        // still requires its measured canvas coordinates in this Uno version.
-        const groupRow = page.locator(`[xamlautomationid="group-${group.id}"]`);
-        if (!await groupRow.count()) { await page.mouse.click(20, 20); await settle(); }
-        await groupRow.waitFor({ state: 'attached', timeout: 10000 });
-        const groupBounds = await groupRow.boundingBox();
-        assert.ok(groupBounds && groupBounds.width > 0, 'Section group is visible before opening its menu');
-        await page.mouse.click(groupBounds.x + groupBounds.width / 2, groupBounds.y + groupBounds.height / 2, { button: 'right' });
-        await settle();
-        await snapshot('ungroup-menu');
-        const menuItem = page.getByRole('menuitem', { name: 'Ungroup (keep all notes)', exact: true });
-        await menuItem.waitFor({ state: 'attached', timeout: 10000 });
-        const menuBounds = await menuItem.boundingBox();
-        assert.ok(menuBounds && menuBounds.width > 0, 'Ungroup menu item is rendered');
-        await page.mouse.click(menuBounds.x + menuBounds.width / 2, menuBounds.y + menuBounds.height / 2);
-        await settle();
+        await contextCommand(group.id, 'Ungroup (keep all notes)');
         await snapshot('ungroup-confirmation');
         const ungroup = page.getByRole('button', { name: 'Ungroup', exact: true });
         await ungroup.waitFor({ state: 'attached', timeout: 10000 });
@@ -160,7 +145,7 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         console.log(`PASS ${completed.length} organization browser workflows`);
         return completed;
     } catch (error) {
-        await writeFile(resolve(output, 'organization-failure.json'), JSON.stringify({ stage, completed, state: await state(), saved: await saved() }, null, 2));
+        await writeFile(resolve(output, 'organization-failure.json'), JSON.stringify({ stage, error: String(error.stack || error), completed, state: await state(), saved: await saved() }, null, 2));
         await writeFile(resolve(output, 'organization-dom.html'), await page.content());
         throw error;
     }
