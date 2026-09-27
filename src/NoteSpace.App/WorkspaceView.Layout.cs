@@ -19,7 +19,7 @@ public sealed partial class WorkspaceView
         titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var white = new OfficeTheme(false, OfficeTheme.Accent, OfficeTheme.Accent, 0xFFFFFFFF, 0xFFE7D8F2, OfficeTheme.Accent, 0xFF9253BF, 0xFF9253BF);
         var quick = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(6, 0, 12, 0) };
-        quick.Children.Add(new OfficeButton("", "menu", () => { navigationOpen = !navigationOpen; ApplyLayout(); }, "Show or hide notebooks", theme: white) { Width = 32, Height = 32 });
+        quick.Children.Add(new OfficeButton("", "menu", () => { if (dialogGate.CurrentCount == 0) return; navigationOpen = !navigationOpen; ApplyLayout(); }, "Show or hide notebooks", theme: white) { Width = 32, Height = 32 });
         quick.Children.Add(new NoteIcon { Glyph = "book", InkColor = 0xFFFFFFFF, Width = 25, Height = 25, VerticalAlignment = VerticalAlignment.Center });
         quick.Children.Add(white.Label("NoteSpace", 14, true));
         quick.Children.Add(new OfficeButton("", "undo", () => Invoke("undo"), "Undo (Ctrl+Z)", theme: white) { Width = 29, Height = 30, Margin = new Thickness(8, 0, 0, 0) });
@@ -90,6 +90,7 @@ public sealed partial class WorkspaceView
             EditingTableCell = surface.IsEditingTableCell, TableRow = surface.SelectedTableCell?.Row, TableColumn = surface.SelectedTableCell?.Column,
             HistoryCharacters = session.RetainedHistoryCharacters, SpatialBuilds = surface.Renderer.Statistics.SpatialBuilds,
             LayoutBuilds = surface.Renderer.Statistics.LayoutBuilds, InkPictureBuilds = surface.Renderer.Statistics.InkPictureBuilds,
+            NotebookPaneVisible = notebooks.Visibility == Visibility.Visible,
             Ready = ready, PageTitle = CurrentPage?.Title, PageId = CurrentPage?.Id,
             SectionGroupCount = session.Document.Notebooks.Sum(n => n.SectionGroups.Count),
             SectionId = CurrentSection?.Id,
@@ -114,6 +115,7 @@ internal sealed class RuntimeState
     public long SpatialBuilds { get; set; }
     public long LayoutBuilds { get; set; }
     public long InkPictureBuilds { get; set; }
+    public bool NotebookPaneVisible { get; set; }
     public bool Ready { get; set; }
     public string? PageTitle { get; set; }
     public string? PageId { get; set; }

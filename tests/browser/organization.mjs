@@ -112,6 +112,7 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         stage = 'create-grouped-section'; await contextCommand(drafts.id, 'New section in group'); await input('Research notes');
         await waitState(() => !!globalThis.noteSpaceState.sectionGroupId && !globalThis.noteSpaceState.dirty);
         assert.equal((await state()).sectionGroupId, drafts.id);
+        assert.equal((await state()).notebookPaneVisible, true, 'Creating a section keeps notebook navigation visible');
         assert.equal(allPages(await saved()).length, allPages(original).length + 1);
         await snapshot('grouped-section'); completed.push('section creation inside group');
 

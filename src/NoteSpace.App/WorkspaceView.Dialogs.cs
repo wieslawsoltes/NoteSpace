@@ -12,8 +12,23 @@ public sealed partial class WorkspaceView
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {
         await dialogGate.WaitAsync();
-        try { dialog.XamlRoot = XamlRoot; dialog.RequestedTheme = RequestedTheme; return await dialog.ShowAsync(); }
-        finally { dialogGate.Release(); }
+        // Keep the quick-access bar out of semantic focus restoration while a
+        // modal editor is closing. A restored toolbar button must not receive the
+        // accepting key's remaining native/semantic activation dispatch.
+        var quickAccess = titleBar.Children.OfType<StackPanel>()
+            .SelectMany(panel => panel.Children.OfType<Control>())
+            .Select(control => (Control: control, WasEnabled: control.IsEnabled)).ToArray();
+        try
+        {
+            foreach (var item in quickAccess) item.Control.IsEnabled = false;
+            dialog.XamlRoot = XamlRoot; dialog.RequestedTheme = RequestedTheme;
+            return await dialog.ShowAsync();
+        }
+        finally
+        {
+            foreach (var item in quickAccess) item.Control.IsEnabled = item.WasEnabled;
+            dialogGate.Release();
+        }
     }
     private async Task MessageAsync(string heading, string text)
     {
