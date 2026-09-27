@@ -7,5 +7,8 @@
     <Project Path="src/NoteSpace.Controls/NoteSpace.Controls.csproj" />
     <Project Path="src/NoteSpace.App/NoteSpace.App.csproj" />
   </Folder>
-  <Folder Name="/tests/"><Project Path="tests/NoteSpace.Tests/NoteSpace.Tests.csproj" /></Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NoteSpace.Tests/NoteSpace.Tests.csproj" />
+    <Project Path="tests/NoteSpace.Rendering.Tests/NoteSpace.Rendering.Tests.csproj" />
+  </Folder>
 </Solution>

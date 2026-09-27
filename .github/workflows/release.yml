@@ -1,0 +1,87 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version (for example 0.1.0)
+        required: true
+        default: '0.1.0'
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate release version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        shell: bash
+        run: |
+          VERSION="$INPUT_VERSION"
+          if [ "$REF_TYPE" = tag ]; then VERSION="${REF_NAME#v}"; fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo 'Invalid package version'; exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Run portable specifications
+        run: dotnet run --project tests/NoteSpace.Tests -c Release
+      - name: Build browser
+        run: |
+          dotnet workload install wasm-tools
+          dotnet publish src/NoteSpace.App -c Release -f net10.0-browserwasm -o artifacts/publish -p:Version="$VERSION" -p:WasmShellWebAppBasePath=/NoteSpace/
+          INDEX=$(find artifacts/publish -name index.html | head -1)
+          test -n "$INDEX"
+          mkdir -p artifacts/site
+          cp -a "$(dirname "$INDEX")/." artifacts/site/
+          touch artifacts/site/.nojekyll
+      - name: Browser integration tests
+        run: |
+          npm install --prefix tests/browser --no-audit --no-fund
+          (cd tests/browser && npx playwright install --with-deps chromium)
+          node tests/browser/smoke.mjs
+      - name: Build desktop and package libraries
+        run: |
+          dotnet build src/NoteSpace.App -c Release -f net10.0-desktop -p:Version="$VERSION"
+          for name in Core Editor Storage Rendering.Skia Controls; do
+            dotnet pack "src/NoteSpace.$name/NoteSpace.$name.csproj" -c Release -o artifacts/packages -p:Version="$VERSION"
+          done
+          (cd artifacts/site && zip -qr "../NoteSpace-browser-$VERSION.zip" .)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notespace-release-qa
+          path: artifacts/qa/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notespace-release
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/NoteSpace-browser-*.zip
+      - name: Publish GitHub release for version tag
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip --clobber
+          else
+            gh release create "$TAG" artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip --verify-tag --title "NoteSpace $VERSION" --generate-notes
+          fi

@@ -17,11 +17,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: notespace-source
+          include-hidden-files: true
+          path: |
+            src/
+            tests/
+            docs/
+            .github/
+            global.json
+            Directory.Build.props
+            NoteSpace.slnx
+            README.md
+            LICENSE
+            SECURITY.md
+            CONTRIBUTING.md
+            .editorconfig
+            .gitignore
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Run portable specifications
-        run: dotnet run --project tests/NoteSpace.Tests -c Release
+      - name: Run portable and rendering specifications
+        run: |
+          dotnet run --project tests/NoteSpace.Tests -c Release
+          dotnet run --project tests/NoteSpace.Rendering.Tests -c Release
       - name: Install WebAssembly workload
         run: dotnet workload install wasm-tools
       - name: Publish browser application
