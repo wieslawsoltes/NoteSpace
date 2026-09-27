@@ -24,6 +24,25 @@ const browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-
 const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
 const page = await context.newPage();
 const errors = []; const logs = [];
+// Observe the native input bridge without changing document or input state.
+await page.addInitScript(() => {
+    globalThis.noteSpaceInputTrace = [];
+    for (const kind of ['focusin', 'focusout', 'keydown', 'keyup', 'beforeinput', 'input']) {
+        document.addEventListener(kind, event => {
+            const key = event.key;
+            queueMicrotask(() => {
+                const active = document.activeElement;
+                const input = document.getElementById('uno-input');
+                const trace = globalThis.noteSpaceInputTrace;
+                if (trace.length >= 240) trace.shift();
+                trace.push({ kind, key, target: event.target?.id,
+                    active: active?.id || active?.tagName,
+                    text: input?.value, start: input?.selectionStart, end: input?.selectionEnd,
+                    pageTitle: globalThis.noteSpaceState?.pageTitle });
+            });
+        });
+    }
+});
 page.on('pageerror', error => errors.push(error.message));
 page.on('console', message => logs.push(`${message.type()}: ${message.text()}`));
 page.on('dialog', async dialog => { await dialog.dismiss(); });
@@ -39,6 +58,15 @@ async function waitEditorFocus() {
         const element = document.activeElement;
         return element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') && element.id !== 'notespace-file-input';
     }, null, { timeout: 10000 });
+}
+async function inputCheckpoint(label) {
+    const data = await page.evaluate(() => ({
+        state: globalThis.noteSpaceState,
+        active: document.activeElement?.outerHTML,
+        input: [...document.querySelectorAll('input,textarea')].map(element => ({ id: element.id, value: element.value, start: element.selectionStart, end: element.selectionEnd })),
+        trace: globalThis.noteSpaceInputTrace
+    }));
+    await writeFile(resolve(output, label + '.json'), JSON.stringify(data, null, 2));
 }
 async function button(name, fallback) {
     const target = page.getByRole('button', { name, exact: true }).first();
@@ -64,8 +92,12 @@ try {
     await button('Add page (Ctrl+Alt+N)', () => page.keyboard.press('Control+Alt+n'));
     await waitState(() => globalThis.noteSpaceState?.pageCount === 6);
     await settle(); await waitEditorFocus();
+    await inputCheckpoint('title-before-select');
     await page.keyboard.press('Control+a');
+    await inputCheckpoint('title-after-select');
     await page.keyboard.type('Browser smoke test');
+    await inputCheckpoint('title-after-type');
+    await page.waitForFunction(() => document.getElementById('uno-input')?.value === 'Browser smoke test', null, { timeout: 5000 });
     await page.keyboard.press('Enter');
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Browser smoke test');
 
@@ -139,7 +171,6 @@ try {
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Browser smoke test'); await settle();
     await page.keyboard.press('ArrowLeft');
     await waitState(() => globalThis.noteSpaceState?.pageCollapsed && globalThis.noteSpaceState.visiblePageCount === 4 && !globalThis.noteSpaceState.dirty);
-    await page.screenshot({ path: resolve(output, 'collapsed-pages.png') });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitState(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty); await settle();
     assert.equal((await state()).pageCollapsed, true); assert.equal((await state()).visiblePageCount, 4);
@@ -172,6 +203,7 @@ try {
     await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot'] }, null, 2));
     console.log('PASS 18 browser workflows: editing, rich text, ink, history, page outline, persistence, conflict, mobile');
 } catch (error) {
+    await inputCheckpoint('failure-input-trace').catch(() => {});
     await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {});
     await writeFile(resolve(output, 'failure-dom.html'), await page.content()).catch(() => {});
     await writeFile(resolve(output, 'failure-state.json'), JSON.stringify(await state().catch(() => null), null, 2) || 'null');
