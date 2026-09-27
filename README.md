@@ -16,7 +16,7 @@ NoteSpace brings a OneNote-style desktop notebook workflow to **Uno Platform**, 
 
 | Area | Implemented workflow |
 | --- | --- |
-| Organization | Create and rename notebooks, sections, and pages; reorder sections/pages; move pages between sections; duplicate pages; two-level subpage hierarchy with persistent collapse, keyboard navigation and subtree moves; favorites; recover deleted pages. |
+| Organization | Create and rename notebooks, sections, and pages; reorder sections/pages; move pages between sections; duplicate pages; nested section groups and cross-notebook section/group moves; non-destructive ungrouping; two-level subpage hierarchy with persistent collapse, keyboard navigation, subtree moves and drag-and-drop; favorites; recover deleted pages. |
 | Free-form editing | Double-click to create/edit text; move containers by their top grip; resize by their lower-right corner; edit page titles; copy/paste note containers. |
 | Text | Font family and size, bold, italic, underline, strikeout, mixed-style range formatting, canonical runs, style-preserving replacement, highlight, colors, alignment, bullets, numbering, heading styles, date/time and symbols. |
 | Ink | Mouse/touch/pen drawing; pressure-sensitive pen width where supplied; highlighter; stroke eraser; rectangles, ellipses, lines; one undo step per gesture. |
@@ -46,6 +46,14 @@ Collapsing a group containing the selected page selects its parent. Search navig
 
 Formatting a mixed selection preserves existing per-run attributes. Bold, italic, underline and strike toggles enable the attribute across a mixed selection, then disable it when all selected text has it. Replace All preserves formatting between matches. An empty selection applies formatting to the whole container, not only future typing. The native text-input overlay still displays the base style while editing; rich styles appear on the Skia surface after editing.
 
+### Section groups and drag-and-drop
+
+Create a **Section Group** from Insert, a notebook's context menu, the **Group** button in navigation, or `Ctrl+Alt+G`. Group context menus create nested groups and sections, rename and reorder groups, move them between notebooks, or **Ungroup** while keeping every note. Section context menus move a section to another notebook or group. Groups support up to eight nested levels; sections appear before child groups at each level. Search navigation reveals the selected section's group ancestors without changing their saved collapse preferences.
+
+In **Order** view, drag a page by its right-hand six-dot grip. The top or bottom quarter of a target row inserts before or after its complete subtree; the middle nests the dragged subtree as its last child. Purple indicators show valid destinations. `Escape`, releasing outside the list, or losing pointer capture cancels without changing the document. Dragging near an edge scrolls the list. Self/descendant drops and moves beyond the two-level subpage limit are rejected. Each committed drop is one undoable action. **Recent** view disables dragging; use context menus for keyboard reordering or cross-section movement.
+
+Groups and drag-and-drop are independently reusable through `NotebookGroups`, `EditorSession`, `NotebookNavigator`, and `PageListControl`. See [organization contracts](docs/organization.md) for API examples and compatibility details.
+
 ### Keyboard shortcuts
 
 | Shortcut | Action |
@@ -54,6 +62,7 @@ Formatting a mixed selection preserves existing per-run attributes. Bold, italic
 | `Ctrl+F` | Search notebooks |
 | `Ctrl+Alt+N` | Add a page |
 | `Ctrl+Alt+Shift+N` | Add a subpage of the current page |
+| `Ctrl+Alt+G` | Create a section group |
 | `F6` | Focus the page list |
 | `Left` / `Right` in the page list | Collapse/expand or navigate to parent/first child |
 | `F2` / `Delete` in the page list | Rename / request deletion with confirmation |
@@ -171,7 +180,7 @@ Imports validate schema, unique identities, finite geometry, text ranges, enums,
 
 ## Continuous integration and releases
 
-**Build, test and deploy** runs on pull requests, pushes to `main`, and manual dispatch. It runs portable specifications, publishes the browser app, drives Chromium through real note-editing and ink workflows, checks mixed-style formatting, nested page navigation, collapse persistence and stale-token rejection, builds the desktop target, packs all reusable libraries, and uploads browser/package/QA artifacts. Only successful main-branch builds deploy to GitHub Pages.
+**Build, test and deploy** runs on pull requests, pushes to `main`, and manual dispatch. It runs portable specifications, publishes the browser app, drives Chromium through real note-editing and ink workflows, checks mixed-style formatting, nested page navigation, collapse persistence, section-group workflows, page drag-and-drop and stale-token rejection, builds the desktop target, packs all reusable libraries, and uploads browser/package/QA artifacts. Only successful main-branch builds deploy to GitHub Pages.
 
 **Release** runs on version tags and manual dispatch. It runs portable, rendering and browser specifications, creates versioned library packages and browser output with a `SHA256SUMS` manifest, checks the version input, and attaches artifacts to a GitHub Release for `v*` tags. It does **not** publish packages to NuGet.org or require a commercial service. NuGet publication can be added separately with a deliberately configured publishing identity.
 
@@ -183,7 +192,7 @@ This implementation provides working notebook interactions but **does not establ
 
 Not implemented: Microsoft `.one` / `.onepkg` compatibility, OneDrive/Microsoft 365 synchronization, authenticated collaboration, CRDT/merge-based editing, OCR, handwriting recognition, ink-to-math, audio/video recording, transcription, web clipping, Outlook integration, password-protected sections, advanced printing, or complete equation editing.
 
-Text layout is a custom Skia layout engine. Full script shaping, bidirectional layout, font fallback qualification, typography equivalence, and screen-reader semantics for canvas content remain work. The native input overlay displays a base text style while editing; selected-range styling appears in the Skia rendering after editing. Fonts depend on the host and may differ from Microsoft’s desktop fonts. Tables use a separate editor rather than OneNote’s in-place table interaction. Section groups, drag-and-drop outline reparenting, and complete OneNote organization parity remain work.
+Text layout is a custom Skia layout engine. Full script shaping, bidirectional layout, font fallback qualification, typography equivalence, and screen-reader semantics for canvas content remain work. The native input overlay displays a base text style while editing; selected-range styling appears in the Skia rendering after editing. Fonts depend on the host and may differ from Microsoft’s desktop fonts. Tables use a separate editor rather than OneNote’s in-place table interaction. Cross-section drag gestures, section/group drag-and-drop, mixed interleaving of sections and groups, and complete OneNote organization parity remain work. Cross-section page moves and cross-notebook section/group moves are available through dialogs.
 
 Markdown import supports plain paragraphs, headings and simple task prefixes. HTML/Markdown exports flatten free-form placement and do not include ink; use PNG or the native `.notespace` backup when those details matter. Very large-document performance, arbitrary attachments, native desktop file pickers, touch/stylus hardware, and assistive technology require broader qualification. The app cannot promise preservation of unsupported OneNote content.
 

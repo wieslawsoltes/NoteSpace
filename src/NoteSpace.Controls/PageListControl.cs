@@ -10,7 +10,7 @@ namespace NoteSpace.Controls;
 
 /// <summary>Reusable notebook page outline. Commands are delegated to the host;
 /// queries never mutate a workspace. Native list selection retains keyboard navigation.</summary>
-public sealed class PageListControl : UserControl
+public sealed partial class PageListControl : UserControl
 {
     private readonly Grid root = new();
     private readonly StackPanel header = new() { Spacing = 4, Margin = new Thickness(10, 12, 10, 6) };
@@ -36,10 +36,12 @@ public sealed class PageListControl : UserControl
             { restoreFocus = true; PageSelected?.Invoke(this, id); }
         };
         list.KeyDown += OnKeyDown;
+        Unloaded += (_, _) => CancelDrag();
     }
 
     public void Bind(NoteSection? value, string? pageId, OfficeTheme palette, bool recent = false)
     {
+        CancelDrag();
         binding = true;
         try
         {
@@ -94,6 +96,7 @@ public sealed class PageListControl : UserControl
             var disclosure = new OfficeButton(expanded ? "⌄" : "›", "", () => Request(expanded ? "collapse-page" : "expand-page", page.Id), (expanded ? "Collapse subpages of " : "Expand subpages of ") + page.Title, theme: theme) { Width = 22, Height = 26, Padding = new Thickness(0), IsTabStop = false };
             AutomationProperties.SetAutomationId(disclosure, "outline-toggle-" + page.Id); content.Children.Add(disclosure);
         }
+        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
         var label = theme.Label((page.IsFavorite ? "★  " : "") + page.Title, 13);
         label.Margin = new Thickness(2, 0, 4, 0); Grid.SetColumn(label, 1); content.Children.Add(label);
         var row = new ListViewItem {
@@ -102,6 +105,7 @@ public sealed class PageListControl : UserControl
             Background = OfficeTheme.Brush(selected ? theme.Selection : 0x00000000),
             BorderBrush = OfficeTheme.Brush(selected ? OfficeTheme.Accent : 0x00000000), BorderThickness = new Thickness(3, 0, 0, 0)
         };
+        if (!recent) { var grip = CreateDragGrip(page.Id); Grid.SetColumn(grip, 2); content.Children.Add(grip); }
         var actions = new List<(string Id, string Label)> { ("rename-page", "Rename"), ("duplicate-page", "Duplicate page") };
         if (entry.Level < PageOutline.MaximumLevel) actions.Add(("new-subpage", "New subpage"));
         if (entry.HasChildren) actions.Add((expanded ? "collapse-page" : "expand-page", expanded ? "Collapse subpages" : "Expand subpages"));
@@ -126,6 +130,7 @@ public sealed class PageListControl : UserControl
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key == VirtualKey.Escape && dragPointer is not null) { CancelDrag(); e.Handled = true; return; }
         var entry = outline.FirstOrDefault(x => x.Page.Id == selectedId); if (entry is null) return;
         if (e.Key == VirtualKey.F2) { Request("rename-page", selectedId); e.Handled = true; }
         else if (e.Key == VirtualKey.Delete) { Request("delete-page", selectedId); e.Handled = true; }

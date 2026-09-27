@@ -15,6 +15,7 @@ internal static class RibbonDefinitions
         ]),
         new("Insert", [
             new("Notes", [C("new-page", "New Page", "page"), C("new-text", "Text Box", "text"), C("template", "Templates", "folder")]),
+            new("Organization", [C("new-section", "Section", "folder", true), C("new-section-group", "Section Group", "folder", true)]),
             new("Tables", [C("table", "Table", "table")]),
             new("Files", [C("image", "Pictures", "image"), C("attachment", "File Attachment", "attachment")]),
             new("Links", [C("link", "Link", "link")]),

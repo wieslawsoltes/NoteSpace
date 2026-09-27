@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import { organizationWorkflows } from './organization.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, stat, mkdir, writeFile } from 'node:fs/promises';
@@ -20,7 +21,7 @@ const server = createServer(async (req, res) => {
     } catch { res.writeHead(404); res.end('Not found'); }
 });
 await new Promise(resolve => server.listen(4173, '127.0.0.1', resolve));
-const browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTESPACE_CHROMIUM || undefined, args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
 const page = await context.newPage();
 const errors = []; const logs = [];
@@ -187,6 +188,8 @@ try {
     await page.keyboard.press('ArrowRight');
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Nested child' && !globalThis.noteSpaceState.dirty);
 
+    const organizationTests = await organizationWorkflows({ page, state, waitState, settle, output });
+
     const conflict = await page.evaluate(async () => {
         const stored = await globalThis.NoteSpaceHost.load();
         const split = stored.indexOf('\n'); const token = stored.slice(0, split); const json = stored.slice(split + 1);
@@ -203,8 +206,8 @@ try {
     await mobilePage.screenshot({ path: resolve(output, 'mobile.png') });
     await mobile.close();
     assert.deepEqual(errors, [], 'No unhandled browser errors');
-    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot'] }, null, 2));
-    console.log('PASS 18 browser workflows: editing, rich text, ink, history, page outline, persistence, conflict, mobile');
+    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot', ...organizationTests] }, null, 2));
+    console.log(`PASS ${18 + organizationTests.length} browser workflows: editing, rich text, ink, organization, history, persistence, conflict, mobile`);
 } catch (error) {
     await inputCheckpoint('failure-input-trace').catch(() => {});
     await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {});

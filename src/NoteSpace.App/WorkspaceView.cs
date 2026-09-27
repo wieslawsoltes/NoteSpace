@@ -59,6 +59,8 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         ribbon.TabChanged += (_, tab) => { if (tab != "Draw") surface.Tool = DrawingTool.Select; UpdateStatus(); Report(); };
         notebooks.SectionSelected += (_, id) => SelectSection(id);
         notebooks.CommandInvoked += (_, request) => Invoke(request.CommandId, request.EntityId);
+        pages.CanDrop = request => !surface.HasPendingText && session.CanMovePageRelative(request);
+        pages.PageMoveRequested += (_, request) => DropPage(request);
         pages.PageSelected += (_, id) => Navigate(id);
         pages.CommandInvoked += (_, request) => Invoke(request.CommandId, request.EntityId);
         surface.CommandRequested += (_, request) => Invoke(request.CommandId, request.EntityId);
@@ -73,6 +75,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         search.ResultSelected += (_, hit) => Navigate(hit.PageId, hit.BlockId);
         topSearch.TextChanged += (_, _) => { searchOpen = topSearch.Text.Length > 0; search.QueryBox.Text = topSearch.Text; ApplyLayout(); UpdateSearch(); };
         saveTimer.Tick += async (_, _) => { saveTimer.Stop(); await SaveAsync(); };
+        AddShortcut(VirtualKey.G, VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu, "new-section-group");
         AddShortcut(VirtualKey.F6, VirtualKeyModifiers.None, "focus-pages");
         AddShortcut(VirtualKey.S, VirtualKeyModifiers.Control, "save");
         AddShortcut(VirtualKey.F, VirtualKeyModifiers.Control, "search");
@@ -153,7 +156,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         if (surface.HasPendingText) return;
         sectionId = session.Pages.FirstOrDefault(x => x.Page.Id == id).Section?.Id;
         if (compactLayout) navigationOpen = false;
-        BindNavigation(); ApplyLayout(); MarkDirty();
+        BindNavigation(); notebooks.RevealSelection(); ApplyLayout(); MarkDirty();
     }
     private void SelectSection(string id)
     {
@@ -164,7 +167,13 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     {
         if (!ready && command != "about") return;
         try { await ExecuteCommandAsync(command, entityId); }
-        catch (Exception error) { await MessageAsync("Could not complete the action", error.Message); }
+        catch (Exception error)
+        {
+            // A rejected transaction rehydrates Document. Navigation controls must
+            // release the old DTO graph before their next pointer or menu event.
+            BindNavigation();
+            await MessageAsync("Could not complete the action", error.Message);
+        }
         UpdateStatus(); Report();
     }
     public void Dispose()
