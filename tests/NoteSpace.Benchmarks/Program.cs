@@ -33,7 +33,7 @@ RenderOptions Retained(float offsetY = 0)
 using (var renderer = new PageRenderer())
 using (var surface = SKSurface.Create(new SKImageInfo(1000, 700)))
 {
-    var page = new NotePage { Blocks = Enumerable.Range(0, 10000).Select(i => new NoteBlock { Kind = BlockKind.Divider, X = i % 100 * 900, Y = i / 100 * 900 + 140, Width = 250, Height = 30 }).ToList() };
+    var page = new NotePage { Title = "Performance fixture", Created = new DateTimeOffset(2026, 9, 27, 12, 0, 0, TimeSpan.Zero), Blocks = Enumerable.Range(0, 10000).Select(i => new NoteBlock { Kind = BlockKind.Divider, X = i % 100 * 900, Y = i / 100 * 900 + 140, Width = 250, Height = 30 }).ToList() };
     var options = Retained(); Measure("sparse-10000-block-frame", () => renderer.Render(surface.Canvas, page, 1000, 700, options), 20);
 }
 using (var renderer = new PageRenderer())
@@ -57,6 +57,7 @@ using (var surface = SKSurface.Create(new SKImageInfo(1000, 240)))
 var pages = Enumerable.Range(0, 100).Select(_ => new NotePage { Blocks = [new NoteBlock { Text = new string('x', 10000) }] }).ToList();
 pages[0].Blocks.Clear();
 var session = new EditorSession(new Workspace { Notebooks = [new Notebook { Sections = [new NoteSection { Pages = pages }] }] });
+Measure("search-missing-in-1mb-workspace", () => { if (session.Search("needle-not-present").Any()) throw new Exception("Unexpected match"); }, 20);
 var selected = session.SelectedPage!.Id; var editNumber = 0;
 Measure("one-page-edit-in-1mb-workspace", () => session.RenamePage(selected, "Edit " + editNumber++), 5);
 var historyProperty = typeof(EditorSession).GetProperty("RetainedHistoryCharacters");

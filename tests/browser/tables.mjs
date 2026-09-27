@@ -32,10 +32,10 @@ export async function tableWorkflows({ browser, output }) {
         await page.waitForFunction(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty, null, { timeout: 150000 }); await settle();
         await page.mouse.click(300, 324); await wait(() => globalThis.noteSpaceState.pageTitle === 'Weekly planning'); await settle();
         stage = 'table-in-place'; await cell(1); await type('Reviewed');
-        await page.keyboard.press('Tab'); await wait(() => globalThis.noteSpaceState.editingTableCell && globalThis.noteSpaceState.tableColumn === 1); await settle();
-        await type('Ada'); await page.keyboard.press('Shift+Tab');
+        stage = 'table-forward-tab'; await page.keyboard.press('Tab'); await wait(() => globalThis.noteSpaceState.editingTableCell && globalThis.noteSpaceState.tableColumn === 1); await settle();
+        await type('Ada'); stage = 'table-backward-tab'; await page.keyboard.press('Shift+Tab');
         await wait(() => globalThis.noteSpaceState.editingTableCell && globalThis.noteSpaceState.tableRow === 1 && globalThis.noteSpaceState.tableColumn === 0);
-        await settle(); await page.keyboard.press('Enter');
+        await settle(); stage = 'table-forward-enter'; await page.keyboard.press('Enter');
         await wait(() => globalThis.noteSpaceState.editingTableCell && globalThis.noteSpaceState.tableRow === 2); await settle();
         await page.keyboard.press('Escape'); await committed();
         let table = await saved(); assert.equal(table.cells[1][0], 'Reviewed'); assert.equal(table.cells[1][1], 'Ada');

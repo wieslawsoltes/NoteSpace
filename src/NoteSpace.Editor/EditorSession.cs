@@ -3,7 +3,13 @@ using NoteSpace.Core;
 namespace NoteSpace.Editor;
 
 public sealed record DocumentChange(string Description, bool StructureChanged);
-public sealed record SearchHit(string NotebookId, string SectionId, string PageId, string PageTitle, string Snippet, string? BlockId);
+public sealed record SearchHit(string NotebookId, string SectionId, string PageId, string PageTitle, string Snippet, string? BlockId)
+{
+    public int Start { get; init; } = -1;
+    public int Length { get; init; }
+    public TableCellAddress? Cell { get; init; }
+    public string Location { get; init; } = "";
+}
 
 /// <summary>A UI-independent, single-writer editor. Mutations must use transactions.
 /// Generic transactions snapshot the workspace; page transactions retain only that page.</summary>

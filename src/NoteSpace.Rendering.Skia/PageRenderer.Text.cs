@@ -30,7 +30,15 @@ public sealed partial class PageRenderer
             return true;
         }
     }
-    private sealed record CachedLayout(LayoutStamp Stamp, TextLayout Value, NoteBlock Block, long? Revision, long Used, long Weight);
+    private sealed class CachedLayout(LayoutStamp stamp, TextLayout value, NoteBlock block, long? revision, long used, long weight)
+    {
+        public LayoutStamp Stamp { get; } = stamp;
+        public TextLayout Value { get; } = value;
+        public NoteBlock Block { get; set; } = block;
+        public long? Revision { get; set; } = revision;
+        public long Used { get; set; } = used;
+        public long Weight { get; } = weight;
+    }
     private readonly Dictionary<string, CachedLayout> layouts = new();
     private long layoutWeight;
     private const long MaximumLayoutWeight = 8 * 1024 * 1024;
@@ -43,7 +51,7 @@ public sealed partial class PageRenderer
         if (layouts.TryGetValue(b.Id, out var cached)
             && (revision.HasValue && cached.Revision == revision && ReferenceEquals(cached.Block, b) || cached.Stamp.Matches(b)))
         {
-            layouts[b.Id] = cached with { Used = ++useClock, Revision = revision, Block = b };
+            cached.Used = ++useClock; cached.Revision = revision; cached.Block = b;
             Statistics.LayoutHits++; return cached.Value;
         }
         Statistics.LayoutBuilds++;

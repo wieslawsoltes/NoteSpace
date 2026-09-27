@@ -23,11 +23,15 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         await page.keyboard.press('Control+a'); await page.keyboard.type(text); await settle();
         await page.keyboard.press('Enter'); await settle();
     };
-    const contextCommand = async (x, y, index) => {
-        await page.mouse.click(x, y, { button: 'right' }); await settle();
-        await page.keyboard.press('Home');
-        for (let i = 0; i < index; i++) await page.keyboard.press('ArrowDown');
-        await page.keyboard.press('Enter'); await settle();
+    const contextCommand = async (id, name) => {
+        const target = page.locator(`[xamlautomationid="group-${id}"]`);
+        await target.waitFor({ state: 'attached', timeout: 10000 });
+        const bounds = await target.boundingBox(); assert.ok(bounds && bounds.width > 0);
+        await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, { button: 'right' }); await settle();
+        const item = page.getByRole('menuitem', { name, exact: true });
+        await item.waitFor({ state: 'attached', timeout: 10000 });
+        const menu = await item.boundingBox(); assert.ok(menu && menu.width > 0);
+        await page.mouse.click(menu.x + menu.width / 2, menu.y + menu.height / 2); await settle();
     };
     // Fixed viewport matches the baseline smoke harness. Grips are at the right
     // edge of the 206px page list; rows are 38px high with a 267px starting Y.
@@ -81,17 +85,24 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         assert.deepEqual(section(await saved()).pages.map(p => [p.id, p.level]), inside.map(p => [p.id, p.level]));
         completed.push('page drag redo and persistence');
 
+        // Menu keyboard focus differs between native and semantic input modes.
+        // Enable the public accessibility UI and target the named rendered item,
+        // rather than assuming Home/ArrowDown selected a particular menu index.
+        const enable = page.getByRole('button', { name: 'Enable accessibility', exact: true });
+        if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
+        if (!await page.locator('[xamlautomationid="page-outline"]').count()) { await page.mouse.click(20, 20); await settle(); }
+
         stage = 'create-section-group'; await page.keyboard.press('Control+Alt+g'); await settle(); await input('Research group');
         await waitState(() => globalThis.noteSpaceState.sectionGroupCount === 1 && !globalThis.noteSpaceState.dirty);
         const group = allGroups(await saved()).find(g => g.title === 'Research group'); assert.ok(group);
         await snapshot('section-group-created'); completed.push('section group creation');
 
-        stage = 'create-nested-group'; await contextCommand(100, 413, 1); await input('Drafts');
+        stage = 'create-nested-group'; await contextCommand(group.id, 'New nested group'); await input('Drafts');
         await waitState(() => globalThis.noteSpaceState.sectionGroupCount === 2 && !globalThis.noteSpaceState.dirty);
         const drafts = allGroups(await saved()).find(g => g.title === 'Drafts'); assert.equal(drafts.parentId, group.id);
         await snapshot('nested-section-groups'); completed.push('nested section group creation');
 
-        stage = 'create-grouped-section'; await contextCommand(100, 451, 0); await input('Research notes');
+        stage = 'create-grouped-section'; await contextCommand(drafts.id, 'New section in group'); await input('Research notes');
         await waitState(() => !!globalThis.noteSpaceState.sectionGroupId && !globalThis.noteSpaceState.dirty);
         assert.equal((await state()).sectionGroupId, drafts.id);
         assert.equal(allPages(await saved()).length, allPages(original).length + 1);
@@ -107,20 +118,14 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         assert.equal(allGroups(await saved()).find(g => g.id === group.id).isCollapsed, true);
         await snapshot('section-group-collapse'); completed.push('section group collapse persistence');
 
-        stage = 'rename-section-group'; await contextCommand(100, 413, 2); await input('Research archive');
+        stage = 'rename-section-group'; await contextCommand(group.id, 'Rename group'); await input('Research archive');
         await waitState(() => !globalThis.noteSpaceState.dirty);
         assert.equal(allGroups(await saved()).find(g => g.id === group.id).title, 'Research archive');
         completed.push('section group rename');
 
         stage = 'ungroup-section-group';
-        // Enable the framework's public accessibility UI to locate dialog buttons
-        // by their rendered bounds. Mouse input still goes through the real canvas.
-        const enable = page.getByRole('button', { name: 'Enable accessibility', exact: true });
-        if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
-        // Once semantic focus is enabled, use pointer targeting instead of mixing
-        // framework menu navigation with the browser's accessibility key handling.
-        // The framework can forward the enabling Space key to its first focused
-        // toolbar control. Restore navigation with a real click if that collapsed it.
+        // Menu items use viewport coordinates; the confirmation popup below
+        // still requires its measured canvas coordinates in this Uno version.
         const groupRow = page.locator(`[xamlautomationid="group-${group.id}"]`);
         if (!await groupRow.count()) { await page.mouse.click(20, 20); await settle(); }
         await groupRow.waitFor({ state: 'attached', timeout: 10000 });

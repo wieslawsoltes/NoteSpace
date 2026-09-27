@@ -87,6 +87,51 @@ internal static class RetainedRenderingTests
             r.Render(s.Canvas, p, 500, 400, new() { ContentRevision = 1 }); Check(r.Statistics.LayoutBuilds > before); r.Dispose(); r.Dispose();
             Throws<ObjectDisposedException>(() => r.Layout(p.Blocks[0]));
         });
+        test("Page headers reuse glyph blobs across frames and invalidate on title or date", () => {
+            using var r = new PageRenderer(); using var s = SKSurface.Create(new SKImageInfo(800, 300)); var p = new NotePage { Title = "Alpha" };
+            r.Render(s.Canvas, p, 800, 300, new() { ContentRevision = 1 }); var before = Pixels(s);
+            for (var i = 0; i < 20; i++) r.Render(s.Canvas, p, 800, 300, new() { ContentRevision = i + 2 });
+            Check(r.Statistics.HeaderBuilds == 1 && before.SequenceEqual(Pixels(s)));
+            p.Title = "Beta"; r.Render(s.Canvas, p, 800, 300); Check(r.Statistics.HeaderBuilds == 2 && !before.SequenceEqual(Pixels(s)));
+            p.Created = p.Created.AddDays(1); r.Render(s.Canvas, p, 800, 300); Check(r.Statistics.HeaderBuilds == 3);
+        });
+        test("Header dark mode and title-editor visibility need no glyph rebuild", () => {
+            using var r = new PageRenderer(); using var s = SKSurface.Create(new SKImageInfo(800, 300)); var p = new NotePage();
+            r.Render(s.Canvas, p, 800, 300); var light = Pixels(s);
+            r.Render(s.Canvas, p, 800, 300, new() { Dark = true }); Check(!light.SequenceEqual(Pixels(s)) && r.Statistics.HeaderBuilds == 1);
+            r.Render(s.Canvas, p, 800, 300, new() { EditingTitle = true }); Check(!light.SequenceEqual(Pixels(s)) && r.Statistics.HeaderBuilds == 1);
+            r.ClearCaches(); r.Render(s.Canvas, p, 800, 300); Check(r.Statistics.HeaderBuilds == 2 && light.SequenceEqual(Pixels(s)));
+        });
+        test("Image retention obeys a byte budget and evicts the least recently used entry", () => {
+            using var r = new PageRenderer { MaximumImageCacheBytes = 40000 }; using var surface = SKSurface.Create(new SKImageInfo(200, 200));
+            using var source = SKSurface.Create(new SKImageInfo(64, 64)); source.Canvas.Clear(SKColors.Red); var bytes = Pixels(source);
+            var page = new NotePage { Blocks = Enumerable.Range(0, 3).Select(i => new NoteBlock { Kind = BlockKind.Image, X = i * 500, Y = 150, Width = 64, Height = 64, Data = bytes }).ToList() };
+            for (var i = 0; i < 3; i++) { r.Render(surface.Canvas, page, 200, 200, new() { ContentRevision = 1, OffsetX = i * 500 }); Check(r.RetainedImageBytes <= r.MaximumImageCacheBytes); }
+            Check(r.Statistics.ImageDecodeAttempts == 3);
+            r.Render(surface.Canvas, page, 200, 200, new() { ContentRevision = 1, OffsetX = 1000 }); Check(r.Statistics.ImageCacheHits == 1);
+            r.Render(surface.Canvas, page, 200, 200, new() { ContentRevision = 1 }); Check(r.Statistics.ImageDecodeAttempts == 4);
+            r.MaximumImageCacheBytes = 1; Check(r.RetainedImageBytes == 0);
+            r.Render(surface.Canvas, page, 200, 200, new() { ContentRevision = 1 }); Check(r.RetainedImageBytes == 0);
+            r.ClearCaches(); Check(r.RetainedImageBytes == 0);
+        });
+        test("Live image resize reuses decoded content while its geometry changes", () => {
+            using var r = new PageRenderer(); using var surface = SKSurface.Create(new SKImageInfo(400, 300));
+            using var source = SKSurface.Create(new SKImageInfo(32, 32)); source.Canvas.Clear(SKColors.Blue);
+            var b = new NoteBlock { Kind = BlockKind.Image, Data = Pixels(source), X = 40, Y = 140, Width = 100, Height = 100 };
+            var page = new NotePage { Blocks = [b] }; var preview = DocumentJson.CloneBlock(b); var options = new RenderOptions { ContentRevision = 1, PreviewBlock = preview };
+            r.Render(surface.Canvas, page, 400, 300, options);
+            for (var i = 0; i < 20; i++) { preview.Width = 100 + i; r.Render(surface.Canvas, page, 400, 300, options); }
+            Check(r.Statistics.ImageDecodeAttempts == 1 && r.Statistics.ImageCacheHits == 20);
+        });
+        test("Invalid image bytes are cached only for a stable content revision", () => {
+            using var r = new PageRenderer(); using var surface = SKSurface.Create(new SKImageInfo(200, 200));
+            var page = new NotePage { Blocks = [new NoteBlock { Kind = BlockKind.Image, Data = [1, 2, 3] }] };
+            for (var i = 0; i < 5; i++) r.Render(surface.Canvas, page, 200, 200, new() { ContentRevision = 1 });
+            Check(r.Statistics.ImageDecodeAttempts == 1 && r.Statistics.ImageCacheHits == 4);
+            r.Render(surface.Canvas, page, 200, 200, new() { ContentRevision = 2 }); Check(r.Statistics.ImageDecodeAttempts == 2);
+            r.Render(surface.Canvas, page, 200, 200); r.Render(surface.Canvas, page, 200, 200); Check(r.Statistics.ImageDecodeAttempts == 4);
+            Throws<ArgumentOutOfRangeException>(() => r.MaximumImageCacheBytes = 0);
+        });
         test("Invalid view transforms are rejected before altering canvas state", () => {
             using var r = new PageRenderer(); using var s = SKSurface.Create(new SKImageInfo(50, 50)); var count = s.Canvas.SaveCount;
             Throws<ArgumentOutOfRangeException>(() => r.Render(s.Canvas, new NotePage(), 50, 50, new() { Zoom = 0 }));

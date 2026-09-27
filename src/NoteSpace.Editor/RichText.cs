@@ -9,7 +9,7 @@ public sealed record TextRun(int Start, int Length, TextFormat Format, string? L
 }
 
 /// <summary>UTF-16 range editing with resolved, non-overlapping formatting runs.</summary>
-public static class RichText
+public static partial class RichText
 {
     private const int MaximumTextLength = 2 * 1024 * 1024;
 

@@ -35,7 +35,6 @@ internal readonly record struct TextLine(int First, int Count, float Top, float 
 public sealed partial class PageRenderer : IDisposable
 {
     private readonly Dictionary<(string Family, bool Bold, bool Italic), SKTypeface> faces = new();
-    private readonly Dictionary<string, (byte[] Data, SKBitmap Bitmap)> images = new();
     private bool disposed;
     /// <summary>Registers host-supplied font bytes for an exact family/style. This renderer owns the decoded face.</summary>
     public void RegisterTypeface(string family, bool bold, bool italic, byte[] fontData)
@@ -46,7 +45,7 @@ public sealed partial class PageRenderer : IDisposable
         if (fontData.Length > 32 * 1024 * 1024) throw new InvalidDataException("Font data exceeds 32 MiB.");
         using var data = SKData.CreateCopy(fontData);
         var face = SKTypeface.FromData(data) ?? throw new InvalidDataException("The supplied font could not be decoded.");
-        ClearFonts();
+        ClearFonts(); ClearHeader();
         var key = (family, bold, italic);
         if (faces.Remove(key, out var old) && !ReferenceEquals(old, SKTypeface.Default)) old.Dispose();
         faces[key] = face;
@@ -94,17 +93,11 @@ public sealed partial class PageRenderer : IDisposable
         {
             canvas.Scale(o.Zoom); canvas.Translate(-o.OffsetX, -o.OffsetY);
             DrawPaper(canvas, page.Paper, viewport, o.Dark);
-            if (viewport.Y < 118)
-            {
-                if (!o.EditingTitle) Text(canvas, page.Title, 48, 66, new TextFormat { FontSize = 32, Color = o.Dark ? 0xFFF3F3F3 : 0xFF242424 });
-                using var line = new SKPaint { Color = new SKColor(o.Dark ? 0xFF555555 : 0xFFCECECE), StrokeWidth = 1 };
-                canvas.DrawLine(48, 83, 690, 83, line);
-                Text(canvas, page.Created.ToString("dddd, MMMM d, yyyy     h:mm tt", CultureInfo.InvariantCulture), 48, 105, new TextFormat { FontSize = 12, Color = o.Dark ? 0xFFBBBBBB : 0xFF767676 });
-            }
+            if (viewport.Y < 118) DrawHeader(canvas, page, o);
             foreach (var at in visibleBlocks)
             {
                 var original = page.Blocks[at]; var b = o.PreviewBlock?.Id == original.Id ? o.PreviewBlock : original;
-                if (o.EditingId != b.Id) DrawBlock(canvas, b, o.Dark, viewport, ReferenceEquals(b, o.PreviewBlock) ? null : o.ContentRevision);
+                if (o.EditingId != b.Id) DrawBlock(canvas, b, o.Dark, viewport, o.ContentRevision, ReferenceEquals(b, o.PreviewBlock));
                 if (b.Id == o.SelectedId || b.Id == o.HoverId) DrawContainer(canvas, b, b.Id == o.SelectedId);
                 if (b.Id == o.SelectedId && b.Kind == BlockKind.Table && o.SelectedCell is { } cell && cell.Row < b.Cells.Count && cell.Column < NoteTable.ColumnCount(b) && cell.Row >= 0 && cell.Column >= 0)
                 {
@@ -137,7 +130,7 @@ public sealed partial class PageRenderer : IDisposable
         }
         if (paper == PaperStyle.Grid) for (var x = firstX; x <= v.X + v.Width; x += step) canvas.DrawLine(x, Math.Max(128, v.Y), x, v.Y + v.Height, paint);
     }
-    private void DrawBlock(SKCanvas canvas, NoteBlock b, bool dark, NoteRect viewport, long? revision)
+    private void DrawBlock(SKCanvas canvas, NoteBlock b, bool dark, NoteRect viewport, long? revision, bool preview)
     {
         canvas.Save(); canvas.ClipRect(SKRect.Create(b.X, b.Y, b.Width, b.Height));
         if (b.Kind == BlockKind.Divider)
@@ -145,7 +138,7 @@ public sealed partial class PageRenderer : IDisposable
             using var p = new SKPaint { Color = new SKColor(0xFFB6A3C6), StrokeWidth = 1.5f }; canvas.DrawLine(b.X, b.Y + 10, b.X + b.Width, b.Y + 10, p);
         }
         else if (b.Kind == BlockKind.Table) DrawTable(canvas, b, dark, viewport);
-        else if (b.Kind == BlockKind.Image) DrawImage(canvas, b);
+        else if (b.Kind == BlockKind.Image) DrawImage(canvas, b, revision);
         else if (b.Kind == BlockKind.Attachment)
         {
             using var p = new SKPaint { IsAntialias = true, Color = new SKColor(dark ? 0xFF343038 : 0xFFF4F0F7) };
@@ -162,7 +155,7 @@ public sealed partial class PageRenderer : IDisposable
                 var r = SKRect.Create(b.X + 12, b.Y + 16, 14, 14); canvas.DrawRoundRect(r, 1, 1, p);
                 if (b.Checked) { p.StrokeWidth = 2; canvas.DrawLine(r.Left + 3, r.MidY, r.Left + 6, r.Bottom - 3, p); canvas.DrawLine(r.Left + 6, r.Bottom - 3, r.Right - 2, r.Top + 3, p); }
             }
-            var layout = LayoutCore(b, revision);
+            var layout = LayoutCore(b, preview ? null : revision);
             var top = viewport.Y - b.Y - 12; var bottom = top + viewport.Height;
             var first = FirstVisibleLine(layout.Lines, top);
             using var paint = new SKPaint { IsAntialias = true };
@@ -208,23 +201,6 @@ public sealed partial class PageRenderer : IDisposable
                 Text(canvas, col < b.Cells[row].Count ? b.Cells[row][col].Replace('\n', ' ') : "", rect.Left + 10, rect.Top + 27, new TextFormat { FontSize = 14, Bold = row == 0, Color = dark ? 0xFFF0F0F0 : 0xFF353535 }); canvas.Restore();
             }
         }
-    }
-    private void DrawImage(SKCanvas canvas, NoteBlock b)
-    {
-        if (b.Data is null) return;
-        SKBitmap? bitmap = null;
-        if (images.TryGetValue(b.Id, out var existing) && ReferenceEquals(existing.Data, b.Data)) bitmap = existing.Bitmap;
-        if (bitmap is null)
-        {
-            using var memory = new SKMemoryStream(b.Data); using var codec = SKCodec.Create(memory);
-            if (codec is null || (long)codec.Info.Width * codec.Info.Height > 16 * 1024 * 1024) { Text(canvas, "Image is invalid or exceeds 16 megapixels", b.X + 12, b.Y + 30, new TextFormat { Color = 0xFFB03030 }); return; }
-            bitmap = SKBitmap.Decode(b.Data); if (bitmap is null) return;
-            if (images.Remove(b.Id, out var stale)) stale.Bitmap.Dispose();
-            if (images.Count >= 24) { foreach (var image in images.Values) image.Bitmap.Dispose(); images.Clear(); }
-            images[b.Id] = (b.Data, bitmap);
-        }
-        var scale = Math.Min(b.Width / bitmap.Width, b.Height / bitmap.Height);
-        canvas.DrawBitmap(bitmap, SKRect.Create(b.X, b.Y, bitmap.Width * scale, bitmap.Height * scale));
     }
     private static void DrawContainer(SKCanvas canvas, NoteBlock b, bool selected)
     {
@@ -273,12 +249,12 @@ public sealed partial class PageRenderer : IDisposable
     }
     public void ClearCaches()
     {
-        ClearLayouts(); ClearInkPictures(); ClearFonts(); indexedPage = null; contentIndex = null;
-        foreach (var i in images.Values) i.Bitmap.Dispose(); images.Clear();
+        ClearLayouts(); ClearInkPictures(); ClearFonts(); ClearHeader(); indexedPage = null; contentIndex = null;
+        ClearImages();
     }
     public void Dispose()
     {
-        if (disposed) return; disposed = true; ClearCaches();
+        if (disposed) return; disposed = true; ClearCaches(); headerPaint.Dispose();
         foreach (var face in faces.Values) if (!ReferenceEquals(face, SKTypeface.Default)) face.Dispose(); faces.Clear();
     }
 }

@@ -73,7 +73,7 @@ public sealed partial class WorkspaceView
         topSearch.Visibility = ActualWidth > 0 && ActualWidth < 800 ? Visibility.Collapsed : Visibility.Visible;
         title.Visibility = ActualWidth > 0 && ActualWidth < 1100 ? Visibility.Collapsed : Visibility.Visible;
     }
-    private void UpdateSearch() { if (searchOpen) search.Bind(session.Search(search.QueryBox.Text), theme); }
+    private void UpdateSearch() { if (searchOpen) search.Bind(session.Search(Query(search.QueryBox.Text, search.Options)), theme); }
     private void UpdateStatus()
     {
         var selected = surface.SelectedBlock;

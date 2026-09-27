@@ -51,5 +51,6 @@ Test("A rejected edit does not discard redo history", () => {
 EditingRegressionTests.Run(Test);
 PerformanceAndTableTests.Run(Test);
 OrganizationTests.Run(Test);
+SearchTests.Run(Test);
 Console.WriteLine($"\n{passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;

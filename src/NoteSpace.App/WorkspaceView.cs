@@ -71,14 +71,16 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         status.ZoomRequested += (_, value) => surface.SetZoom(value);
         status.FocusRequested += (_, _) => Invoke("full-page");
         backstage.CommandInvoked += (_, command) => Invoke(command);
-        search.QueryBox.TextChanged += (_, _) => UpdateSearch();
-        search.ResultSelected += (_, hit) => Navigate(hit.PageId, hit.BlockId);
-        topSearch.TextChanged += (_, _) => { searchOpen = topSearch.Text.Length > 0; search.QueryBox.Text = topSearch.Text; ApplyLayout(); UpdateSearch(); };
+        ConfigureSearch();
+        search.QueryBox.TextChanged += (_, _) => ScheduleSearch();
+        search.ResultSelected += (_, hit) => NavigateSearchResult(hit);
+        topSearch.TextChanged += (_, _) => { searchOpen = topSearch.Text.Length > 0; search.QueryBox.Text = topSearch.Text; ApplyLayout(); ScheduleSearch(); };
         saveTimer.Tick += async (_, _) => { saveTimer.Stop(); await SaveAsync(); };
         AddShortcut(VirtualKey.G, VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu, "new-section-group");
         AddShortcut(VirtualKey.F6, VirtualKeyModifiers.None, "focus-pages");
         AddShortcut(VirtualKey.S, VirtualKeyModifiers.Control, "save");
         AddShortcut(VirtualKey.F, VirtualKeyModifiers.Control, "search");
+        AddShortcut(VirtualKey.H, VirtualKeyModifiers.Control, "replace");
         AddShortcut(VirtualKey.Z, VirtualKeyModifiers.Control, "undo");
         AddShortcut(VirtualKey.Y, VirtualKeyModifiers.Control, "redo");
         AddShortcut(VirtualKey.B, VirtualKeyModifiers.Control, "bold");
@@ -122,7 +124,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     {
         MarkDirty();
         if (change.StructureChanged) BindNavigation();
-        UpdateStatus(); UpdateSearch(); Report();
+        UpdateStatus(); ScheduleSearch(); Report();
     }
     private void MarkDirty()
     {
@@ -190,6 +192,6 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     }
     public void Dispose()
     {
-        if (disposed) return; disposed = true; saveTimer.Stop(); session.Changed -= OnDocumentChanged; surface.Dispose();
+        if (disposed) return; disposed = true; saveTimer.Stop(); searchTimer.Stop(); session.Changed -= OnDocumentChanged; surface.Dispose();
     }
 }

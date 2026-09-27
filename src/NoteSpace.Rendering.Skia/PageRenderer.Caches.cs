@@ -7,6 +7,9 @@ namespace NoteSpace.Rendering.Skia;
 /// <summary>Cumulative cache counters and most-recent-frame work. CPU wall time is not GPU time or FPS.</summary>
 public sealed class RendererStatistics
 {
+    public long HeaderBuilds { get; internal set; }
+    public long ImageDecodeAttempts { get; internal set; }
+    public long ImageCacheHits { get; internal set; }
     public long SpatialBuilds { get; internal set; }
     public long LayoutBuilds { get; internal set; }
     public long LayoutHits { get; internal set; }
