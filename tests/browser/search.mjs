@@ -50,7 +50,9 @@ export async function searchWorkflows({ browser, output }) {
         stage = 'search-table-location'; await query('Design review'); await count(1);
         const tableResult = await result().first().getAttribute('xamlautomationid'); await click(tableResult);
         await wait(() => globalThis.noteSpaceState.pageTitle === 'Weekly planning' && globalThis.noteSpaceState.editingTableCell && globalThis.noteSpaceState.tableRow === 1 && globalThis.noteSpaceState.tableColumn === 0);
-        assert.equal(await page.evaluate(() => document.getElementById('uno-input')?.value), 'Design review');
+        await settle();
+        await page.waitForFunction(() => document.activeElement?.value === 'Design review', null, { timeout: 10000 });
+        assert.equal(await page.evaluate(() => document.activeElement?.value), 'Design review');
         completed.push('search navigates to exact table cell');
 
         stage = 'search-whole-word'; await query('plan'); await count(2);
@@ -69,7 +71,7 @@ export async function searchWorkflows({ browser, output }) {
         stage = 'search-text-selection'; await query('possibility'); await count(1);
         await click(await result().first().getAttribute('xamlautomationid'));
         await wait(() => globalThis.noteSpaceState.pageTitle === 'Welcome to NoteSpace'); await settle();
-        const selected = await page.evaluate(() => { const e = document.getElementById('uno-input'); return e?.value.slice(e.selectionStart, e.selectionEnd); });
+        const selected = await page.evaluate(() => { const e = document.activeElement; return typeof e?.value === 'string' ? e.value.slice(e.selectionStart, e.selectionEnd) : null; });
         assert.equal(selected, 'possibility'); completed.push('search selects the matched text range');
         await page.keyboard.press('Escape'); await settle();
 
@@ -96,7 +98,7 @@ export async function searchWorkflows({ browser, output }) {
         await page.screenshot({ path: resolve(output, 'search-failure.png') }).catch(() => {});
         await writeFile(resolve(output, 'search-failure.json'), JSON.stringify({ stage, error: String(error.stack || error), completed, errors,
             state: await page.evaluate(() => globalThis.noteSpaceState).catch(() => null), saved: await saved().catch(() => null),
-            input: await page.evaluate(() => ({ html: document.activeElement?.outerHTML, value: document.getElementById('uno-input')?.value })).catch(() => null)
+            input: await page.evaluate(() => ({ html: document.activeElement?.outerHTML, value: document.activeElement?.value })).catch(() => null)
         }, null, 2));
         await writeFile(resolve(output, 'search-failure-dom.html'), await page.content()); throw error;
     } finally { await context.close(); }

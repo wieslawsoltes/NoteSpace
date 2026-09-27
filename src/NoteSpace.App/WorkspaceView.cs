@@ -139,8 +139,11 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         saving = true;
         try
         {
-            var version = changes; var snapshot = DocumentJson.Clone(session.Document);
-            storageToken = await platform.Store.SaveAsync(snapshot, storageToken);
+            var version = changes;
+            if (platform.Store is IWorkspaceSnapshotStore snapshots)
+                storageToken = await snapshots.SaveSnapshotAsync(WorkspaceSnapshot.Capture(session.Document), storageToken);
+            else // Preserve compatibility with third-party mutable-document stores.
+                storageToken = await platform.Store.SaveAsync(DocumentJson.Clone(session.Document), storageToken);
             savedChanges = version; saveStatus = changes == version ? "Saved on this device" : "Saving…";
             if (changes != version) saveTimer.Start();
         }

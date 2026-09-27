@@ -23,7 +23,6 @@ export async function tableWorkflows({ browser, output }) {
         await page.waitForFunction(({ row, column }) => globalThis.noteSpaceState?.editingTableCell && globalThis.noteSpaceState.tableRow === row && globalThis.noteSpaceState.tableColumn === column, { row, column }, { timeout: 10000 });
     };
     const ribbon = async (label, x, y) => {
-        const button = page.getByRole('button', { name: label, exact: true }).first();
         // Semantic nodes are pointer-transparent; the canvas receives real input.
         await page.mouse.click(x, y);
         await settle();
@@ -63,8 +62,12 @@ export async function tableWorkflows({ browser, output }) {
         // All new ribbon controls have stable semantic names/automation IDs.
         const command = async (id) => {
             const item = page.locator(`[xamlautomationid="command-table-${id}"]`);
-            await item.waitFor({ state: 'attached', timeout: 10000 }); const b = await item.boundingBox();
-            assert.ok(b && b.width > 0); await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await committed();
+            await item.waitFor({ state: 'attached', timeout: 10000 });
+            // The semantic child rectangles are group-local in this Uno version.
+            // Use the measured ribbon locations for real pointer input.
+            const points = { 'row-above': [292, 94], 'delete-row': [292, 147],
+                'column-right': [426, 120], transpose: [700, 120], copy: [556, 120], paste: [628, 120] };
+            assert.ok(points[id]); await page.mouse.click(...points[id]); await committed();
         };
         await command('row-above'); assert.equal((await saved()).cells.length, 6);
         await command('delete-row'); assert.equal((await saved()).cells.length, 5);

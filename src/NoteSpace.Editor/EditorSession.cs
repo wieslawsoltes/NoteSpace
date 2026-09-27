@@ -34,7 +34,7 @@ public sealed partial class EditorSession
     public int RedoCount => redo.Count;
     public EditorSession(Workspace document)
     {
-        DocumentJson.Validate(document); SerializeBounded(document); Document = document;
+        DocumentJson.Validate(document); WorkspaceSerialization.MeasureCharacters(document); Document = document;
     }
     private IEnumerable<(Notebook Notebook, NoteSection Section, NotePage Page)> EnumeratePages()
     {
@@ -128,7 +128,7 @@ public sealed partial class EditorSession
             DocumentJson.Validate(Document);
             // Full size validation is deliberately retained; no estimate can bypass
             // attachment, escaping, version-history, or aggregate workspace limits.
-            SerializeBounded(Document);
+            WorkspaceSerialization.MeasureCharacters(Document);
         }
         catch { location.Section.Pages[position] = location.Page; Document.Revision = revision; throw; }
         finally { executing = false; InvalidateIndexes(); }
@@ -156,7 +156,7 @@ public sealed partial class EditorSession
             var page = DocumentJson.ReadPage(json); var at = location.Section.Pages.IndexOf(location.Page);
             var oldRevision = Document.Revision;
             location.Section.Pages[at] = page; Document.Revision = nextRevision;
-            try { DocumentJson.Validate(Document); SerializeBounded(Document); }
+            try { DocumentJson.Validate(Document); WorkspaceSerialization.MeasureCharacters(Document); }
             catch { location.Section.Pages[at] = location.Page; Document.Revision = oldRevision; throw; }
             Document.Revision = nextRevision;
         }

@@ -47,7 +47,8 @@ public static class LiteralTextSearch
         var comparison = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         for (; offset <= text.Length - query.Length;)
         {
-            var at = text.IndexOf(query, offset, comparison); if (at < 0) break;
+            var relative = text.AsSpan(offset).IndexOf(query.AsSpan(), comparison); if (relative < 0) break;
+            var at = offset + relative;
             var end = at + query.Length;
             if (!SplitsPair(text, at) && !SplitsPair(text, end) && (!wholeWord || (!WordBefore(text, at) && !WordAt(text, end))))
             { match = new(at, query.Length); return true; }

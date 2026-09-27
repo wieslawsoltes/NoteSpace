@@ -13,7 +13,7 @@ public interface IWorkspaceStore
     Task<string> SaveAsync(Workspace document, string? expectedToken, CancellationToken cancellationToken = default);
 }
 /// <summary>Atomic replace plus an exclusive interprocess lock for desktop/CLI consumers.</summary>
-public sealed class FileWorkspaceStore(string path) : IWorkspaceStore
+public sealed class FileWorkspaceStore(string path) : IWorkspaceSnapshotStore
 {
     private readonly string fullPath = Path.GetFullPath(path);
     public async Task<StoredWorkspace?> LoadAsync(CancellationToken cancellationToken = default)
@@ -24,10 +24,15 @@ public sealed class FileWorkspaceStore(string path) : IWorkspaceStore
         var json = await File.ReadAllTextAsync(fullPath, cancellationToken);
         return new StoredWorkspace(DocumentJson.Deserialize(json), Token(json));
     }
-    public async Task<string> SaveAsync(Workspace document, string? expectedToken, CancellationToken cancellationToken = default)
+    public Task<string> SaveAsync(Workspace document, string? expectedToken, CancellationToken cancellationToken = default)
     {
-        DocumentJson.Validate(document); var json = DocumentJson.Serialize(document);
-        if (json.Length > DocumentJson.MaxJsonLength) throw new InvalidDataException("Notebook exceeds the 32 MiB JSON interchange limit. Nothing was overwritten.");
+        cancellationToken.ThrowIfCancellationRequested();
+        return SaveSnapshotAsync(WorkspaceSnapshot.Capture(document), expectedToken, cancellationToken);
+    }
+    public async Task<string> SaveSnapshotAsync(WorkspaceSnapshot snapshot, string? expectedToken, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot); cancellationToken.ThrowIfCancellationRequested();
+        var json = snapshot.Json;
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         await using var fileLock = new FileStream(fullPath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var existing = await LoadAsync(cancellationToken);

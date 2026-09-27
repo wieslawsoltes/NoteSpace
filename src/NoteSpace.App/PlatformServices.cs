@@ -77,7 +77,7 @@ internal static partial class BrowserBridge
     [JSImport("globalThis.NoteSpaceHost.report")]
     internal static partial void Report(string json);
 }
-internal sealed class BrowserWorkspaceStore : IWorkspaceStore
+internal sealed class BrowserWorkspaceStore : IWorkspaceSnapshotStore
 {
     public async Task<StoredWorkspace?> LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -87,10 +87,15 @@ internal sealed class BrowserWorkspaceStore : IWorkspaceStore
         if (separator < 1) throw new InvalidDataException("Invalid stored notebook header. Export a backup before resetting storage.");
         return new StoredWorkspace(DocumentJson.Deserialize(result[(separator + 1)..]), result[..separator]);
     }
-    public async Task<string> SaveAsync(Workspace document, string? expectedToken, CancellationToken cancellationToken = default)
+    public Task<string> SaveAsync(Workspace document, string? expectedToken, CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested(); DocumentJson.Validate(document);
-        try { return await BrowserBridge.Save(DocumentJson.Serialize(document), expectedToken ?? ""); }
+        cancellationToken.ThrowIfCancellationRequested();
+        return SaveSnapshotAsync(WorkspaceSnapshot.Capture(document), expectedToken, cancellationToken);
+    }
+    public async Task<string> SaveSnapshotAsync(WorkspaceSnapshot snapshot, string? expectedToken, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot); cancellationToken.ThrowIfCancellationRequested();
+        try { return await BrowserBridge.Save(snapshot.Json, expectedToken ?? ""); }
         catch (JSException e) when (e.Message.Contains("NOTESPACE_CONFLICT", StringComparison.Ordinal)) { throw new StorageConflictException(); }
     }
 }

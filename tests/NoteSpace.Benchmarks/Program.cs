@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using NoteSpace.Core;
 using NoteSpace.Editor;
+using NoteSpace.Storage;
 using NoteSpace.Rendering.Skia;
 using SkiaSharp;
 
@@ -58,6 +59,13 @@ var pages = Enumerable.Range(0, 100).Select(_ => new NotePage { Blocks = [new No
 pages[0].Blocks.Clear();
 var session = new EditorSession(new Workspace { Notebooks = [new Notebook { Sections = [new NoteSection { Pages = pages }] }] });
 Measure("search-missing-in-1mb-workspace", () => { if (session.Search("needle-not-present").Any()) throw new Exception("Unexpected match"); }, 20);
+// Measure only the immutable payload preparation used by autosave, not disk or
+// IndexedDB latency. The baseline app cloned its DTO graph before serializing again.
+var capture = typeof(IWorkspaceStore).Assembly.GetType("NoteSpace.Storage.WorkspaceSnapshot")?.GetMethod("Capture", [typeof(Workspace)]);
+Measure("autosave-snapshot-1mb-workspace", () => {
+    if (capture is not null) _ = capture.Invoke(null, [session.Document]);
+    else { var copy = DocumentJson.Clone(session.Document); DocumentJson.Validate(copy); _ = DocumentJson.Serialize(copy); }
+}, 5);
 var selected = session.SelectedPage!.Id; var editNumber = 0;
 Measure("one-page-edit-in-1mb-workspace", () => session.RenamePage(selected, "Edit " + editNumber++), 5);
 var historyProperty = typeof(EditorSession).GetProperty("RetainedHistoryCharacters");
