@@ -117,8 +117,16 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         // by their rendered bounds. Mouse input still goes through the real canvas.
         const enable = page.getByRole('button', { name: 'Enable accessibility', exact: true });
         if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
-        // End is not handled by every platform menu; navigate explicit items instead.
-        await contextCommand(100, 413, 6);
+        // Once semantic focus is enabled, use pointer targeting instead of mixing
+        // framework menu navigation with the browser's accessibility key handling.
+        await page.mouse.click(100, 413, { button: 'right' }); await settle();
+        await snapshot('ungroup-menu');
+        const menuItem = page.getByRole('menuitem', { name: 'Ungroup (keep all notes)', exact: true });
+        await menuItem.waitFor({ state: 'attached', timeout: 10000 });
+        const menuBounds = await menuItem.boundingBox();
+        assert.ok(menuBounds && menuBounds.width > 0, 'Ungroup menu item is rendered');
+        await page.mouse.click(menuBounds.x + menuBounds.width / 2, menuBounds.y + menuBounds.height / 2);
+        await settle();
         await snapshot('ungroup-confirmation');
         const ungroup = page.getByRole('button', { name: 'Ungroup', exact: true });
         await ungroup.waitFor({ state: 'attached', timeout: 10000 });
