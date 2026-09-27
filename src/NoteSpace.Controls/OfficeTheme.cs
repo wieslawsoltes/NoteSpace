@@ -12,9 +12,12 @@ public sealed record OfficeTheme(bool IsDark, uint Surface, uint Panel, uint Tex
     public static OfficeTheme Light { get; } = new(false, 0xFFFFFFFF, 0xFFF7F7F7, 0xFF242424, 0xFF707070, 0xFFE2E2E2, 0xFFF0EAF4, 0xFFEFE3F7);
     public static OfficeTheme Dark { get; } = new(true, 0xFF252525, 0xFF202020, 0xFFF2F2F2, 0xFFB2B2B2, 0xFF424242, 0xFF43364B, 0xFF513463);
     public static SolidColorBrush Brush(uint value) => new(Color.FromArgb((byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value));
+    public static FontFamily ResolveFont(string family = "Segoe UI") => new(
+        OperatingSystem.IsBrowser() && family is "Segoe UI" or "Open Sans" or "Arial" or "Calibri"
+            ? "ms-appx:///Uno.Fonts.OpenSans/Fonts/OpenSans.ttf#Open Sans" : family);
     public TextBlock Label(string text, double size = 13, bool bold = false, uint? color = null) => new()
     {
-        Text = text, FontSize = size, FontFamily = new FontFamily("Segoe UI"),
+        Text = text, FontSize = size, FontFamily = ResolveFont(),
         FontWeight = new Windows.UI.Text.FontWeight { Weight = (ushort)(bold ? 600 : 400) },
         Foreground = Brush(color ?? Text), VerticalAlignment = VerticalAlignment.Center,
         TextTrimming = TextTrimming.CharacterEllipsis

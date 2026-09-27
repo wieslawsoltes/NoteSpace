@@ -30,6 +30,20 @@ public sealed class PageRenderer : IDisposable
     private readonly Dictionary<string, (int Key, TextLayout Value)> layouts = new();
     private readonly Dictionary<string, (byte[] Data, SKBitmap Bitmap)> images = new();
     private bool disposed;
+    /// <summary>Registers host-supplied font bytes for an exact family/style. This renderer owns the decoded face.</summary>
+    public void RegisterTypeface(string family, bool bold, bool italic, byte[] fontData)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(family);
+        ArgumentNullException.ThrowIfNull(fontData);
+        if (fontData.Length > 32 * 1024 * 1024) throw new InvalidDataException("Font data exceeds 32 MiB.");
+        using var data = SKData.CreateCopy(fontData);
+        var face = SKTypeface.FromData(data) ?? throw new InvalidDataException("The supplied font could not be decoded.");
+        var key = (family, bold, italic);
+        if (faces.Remove(key, out var old) && !ReferenceEquals(old, SKTypeface.Default)) old.Dispose();
+        faces[key] = face;
+        layouts.Clear();
+    }
     private SKTypeface Face(TextFormat format)
     {
         var key = (format.FontFamily, format.Bold, format.Italic);
@@ -40,7 +54,7 @@ public sealed class PageRenderer : IDisposable
     private float Measure(string text, TextFormat format) { using var font = new SKFont(Face(format), format.FontSize); return font.MeasureText(text); }
     public TextLayout Layout(NoteBlock b)
     {
-        var hash = new HashCode(); hash.Add(b.Text); hash.Add(b.Width); AddFormat(ref hash, b.Format);
+        var hash = new HashCode(); hash.Add(b.Text); hash.Add(b.Width); hash.Add(b.Kind); AddFormat(ref hash, b.Format);
         foreach (var m in b.Marks) { hash.Add(m.Start); hash.Add(m.Length); AddFormat(ref hash, m.Format); }
         var key = hash.ToHashCode();
         if (layouts.TryGetValue(b.Id, out var cached) && cached.Key == key) return cached.Value;

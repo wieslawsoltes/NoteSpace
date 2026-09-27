@@ -63,6 +63,7 @@ public sealed partial class NoteSurface : Grid, IDisposable
     public void NavigateToPage(string pageId, string? blockId = null)
     {
         EndEditing(); if (pendingText) return;
+        CancelGesture();
         session?.SelectPage(pageId); SelectedBlockId = blockId;
         canvas.Options.OffsetX = 0; canvas.Options.OffsetY = 0;
         if (SelectedBlock is { } b) { canvas.Options.OffsetY = Math.Max(0, b.Y - 150); canvas.Options.OffsetX = Math.Max(0, b.X - 60); }
@@ -70,27 +71,31 @@ public sealed partial class NoteSurface : Grid, IDisposable
     }
     public void SetZoom(float value)
     {
-        canvas.Options.Zoom = Math.Clamp(value, 0.25f, 2.5f); Refresh(); ViewChanged?.Invoke(this, EventArgs.Empty);
+        if (!float.IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(value));
+        value = Math.Clamp(value, 0.25f, 2.5f);
+        if (Math.Abs(value - Zoom) < 0.0001f) return;
+        canvas.Options.Zoom = value; Refresh(); ViewChanged?.Invoke(this, EventArgs.Empty);
     }
-    public void FitWidth() { if (Page is not null) { canvas.Options.OffsetX = 0; SetZoom((float)Math.Max(200, ActualWidth - 30) / PageRenderer.Extent(Page).Width); } }
+    public void FitWidth() { if (Page is not null) { canvas.Options.OffsetX = 0; SetZoom((float)Math.Max(200, ActualWidth - 30) / PageRenderer.Extent(Page).Width); Refresh(); } }
     public void SelectBlock(string? id)
     {
         if (id != SelectedBlockId) EndEditing(); SelectedBlockId = id; Refresh(); SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
     public NoteBlock InsertBlock(NoteBlock block, bool edit = false)
     {
-        EndEditing(); if (session is null || Page is null) throw new InvalidOperationException("Select or create a page first.");
+        EndEditing(); if (pendingText) throw new InvalidOperationException("Resolve the current text-edit error before inserting another note.");
+        if (session is null || Page is null) throw new InvalidOperationException("Select or create a page first.");
         session.AddBlock(Page.Id, block); SelectBlock(block.Id); if (edit) BeginEdit(block); return block;
     }
     public NoteBlock NewText(float? x = null, float? y = null) => InsertBlock(new NoteBlock { X = Math.Clamp(x ?? canvas.Options.OffsetX + 48, 0, 99000), Y = Math.Clamp(y ?? Math.Max(145, canvas.Options.OffsetY + 60), 120, 99000), Width = 560, Height = 60 }, true);
     public void DeleteSelected()
     {
-        EndEditing(); if (session is null || Page is null || SelectedBlockId is null) return;
+        EndEditing(); if (pendingText || session is null || Page is null || SelectedBlockId is null) return;
         session.DeleteBlock(Page.Id, SelectedBlockId); SelectBlock(null);
     }
     public void CopySelected(bool cut = false)
     {
-        FlushPendingText(); if (SelectedBlock is not { } block) return;
+        FlushPendingText(); if (pendingText || SelectedBlock is not { } block) return;
         copiedBlock = DocumentJson.CloneBlock(block); if (cut) DeleteSelected();
     }
     public bool PasteSelected()
