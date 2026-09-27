@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using NoteSpace.Controls;
 using NoteSpace.Core;
 
@@ -12,23 +13,39 @@ public sealed partial class WorkspaceView
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {
         await dialogGate.WaitAsync();
-        // Keep the quick-access bar out of semantic focus restoration while a
-        // modal editor is closing. A restored toolbar button must not receive the
-        // accepting key's remaining native/semantic activation dispatch.
-        var quickAccess = titleBar.Children.OfType<StackPanel>()
-            .SelectMany(panel => panel.Children.OfType<Control>())
+        // Modal focus restoration must not choose a background button while the
+        // accepting input event is still dispatching. Disable the topmost control
+        // roots (their descendants inherit the state), including ribbon/navigation,
+        // and postpone restoration to the next dispatcher turn.
+        var controls = ModalInputRoots(root)
             .Select(control => (Control: control, WasEnabled: control.IsEnabled)).ToArray();
+        var hitTestVisible = body.IsHitTestVisible;
         try
         {
-            foreach (var item in quickAccess) item.Control.IsEnabled = false;
+            foreach (var item in controls) item.Control.IsEnabled = false;
+            body.IsHitTestVisible = false;
             dialog.XamlRoot = XamlRoot; dialog.RequestedTheme = RequestedTheme;
             return await dialog.ShowAsync();
         }
         finally
         {
-            foreach (var item in quickAccess) item.Control.IsEnabled = item.WasEnabled;
-            dialogGate.Release();
+            void RestoreInput()
+            {
+                try
+                {
+                    foreach (var item in controls) item.Control.IsEnabled = item.WasEnabled;
+                    body.IsHitTestVisible = hitTestVisible;
+                }
+                finally { dialogGate.Release(); }
+            }
+            if (!DispatcherQueue.TryEnqueue(RestoreInput)) RestoreInput();
         }
+    }
+    private static IEnumerable<Control> ModalInputRoots(DependencyObject element)
+    {
+        if (element is Control control) { yield return control; yield break; }
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
+            foreach (var child in ModalInputRoots(VisualTreeHelper.GetChild(element, i))) yield return child;
     }
     private async Task MessageAsync(string heading, string text)
     {

@@ -171,7 +171,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     }
     private async void Invoke(string command, string? entityId = null)
     {
-        if (!ready && command != "about") return;
+        if ((!ready && command != "about") || dialogGate.CurrentCount == 0) return;
         try
         {
             if (command is "undo" or "redo" or "new-page")
