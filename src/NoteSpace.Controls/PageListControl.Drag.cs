@@ -28,7 +28,7 @@ public sealed partial class PageListControl
     private FrameworkElement CreateDragGrip(string id)
     {
         var grip = new Border { Width = 20, Height = 28, Background = OfficeTheme.Brush(0x00000000),
-            Child = theme.Label("⠿", 15, color: theme.Muted), ManipulationMode = ManipulationModes.None };
+            Child = new NoteIcon { Glyph = "grip", InkColor = theme.Muted, Width = 16, Height = 20 }, ManipulationMode = ManipulationModes.None };
         AutomationProperties.SetName(grip, "Drag page group"); AutomationProperties.SetAutomationId(grip, "page-grip-" + id);
         ToolTipService.SetToolTip(grip, "Drag above/below a page to reorder; drop in its middle to nest. Escape cancels. Context menus provide keyboard alternatives.");
         grip.PointerPressed += (_, e) => {

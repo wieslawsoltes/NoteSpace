@@ -46,6 +46,8 @@ public sealed class NotebookNavigator : UserControl
         {
             var row = new OfficeButton(n.Title, "book", () => { if (!collapsed.Add(n.Id)) collapsed.Remove(n.Id); Rebuild(); }, n.Title + " notebook", theme: theme)
             { Height = 40, HorizontalContentAlignment = HorizontalAlignment.Left, HorizontalAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(8, 4, 4, 4) };
+            row.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            row.Content = NavigationHeading(n.Title, "book", n.Color, !collapsed.Contains(n.Id));
             row.ContextFlyout = OfficeMenus.Create(id => Request(id, n.Id), ("new-section", "New section"), ("new-section-group", "New section group"), ("rename-notebook", "Rename notebook"), ("-", ""), ("delete-notebook", "Delete notebook"));
             items.Children.Add(row);
             if (collapsed.Contains(n.Id)) continue;
@@ -75,10 +77,24 @@ public sealed class NotebookNavigator : UserControl
             Request(expanded ? "collapse-group" : "expand-group", group.Id); Rebuild();
         }, (expanded ? "Collapse " : "Expand ") + group.Title + " group", theme: theme)
         { Height = 36, Margin = new Thickness(4 + 12 * level, 0, 0, 0), HorizontalContentAlignment = HorizontalAlignment.Left, HorizontalAlignment = HorizontalAlignment.Stretch };
+        row.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        row.Content = NavigationHeading(group.Title, "folder", group.Color, expanded);
         row.ContextFlyout = OfficeMenus.Create(id => Request(id, group.Id), ("new-section", "New section in group"), ("new-section-group", "New nested group"), ("rename-group", "Rename group"), ("move-group", "Move group…"), ("group-up", "Move up"), ("group-down", "Move down"), ("-", ""), ("ungroup", "Ungroup (keep all notes)"));
         AutomationProperties.SetAutomationId(row, "group-" + group.Id);
         AutomationProperties.SetHelpText(row, NotebookGroups.Path(notebook, group.Id));
         items.Children.Add(row);
+    }
+    private Grid NavigationHeading(string text, string icon, uint color, bool expanded)
+    {
+        var content = new Grid();
+        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+        content.ColumnDefinitions.Add(new ColumnDefinition());
+        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
+        content.Children.Add(new NoteIcon { Glyph = icon, InkColor = color, Width = 18, Height = 18, HorizontalAlignment = HorizontalAlignment.Left });
+        var label = theme.Label(text, 13, true); Grid.SetColumn(label, 1); content.Children.Add(label);
+        var disclosure = new NoteIcon { Glyph = expanded ? "chevron" : "chevron-right", InkColor = theme.Muted, Width = 14, Height = 14 };
+        Grid.SetColumn(disclosure, 2); content.Children.Add(disclosure);
+        return content;
     }
     private void AddSection(Notebook notebook, NoteSection section, int level)
     {
