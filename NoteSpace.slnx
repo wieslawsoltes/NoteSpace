@@ -10,5 +10,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/NoteSpace.Tests/NoteSpace.Tests.csproj" />
     <Project Path="tests/NoteSpace.Rendering.Tests/NoteSpace.Rendering.Tests.csproj" />
+    <Project Path="tests/NoteSpace.Benchmarks/NoteSpace.Benchmarks.csproj" />
   </Folder>
 </Solution>

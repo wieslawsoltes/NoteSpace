@@ -20,7 +20,7 @@ NoteSpace brings a OneNote-style desktop notebook workflow to **Uno Platform**, 
 | Free-form editing | Double-click to create/edit text; move containers by their top grip; resize by their lower-right corner; edit page titles; copy/paste note containers. |
 | Text | Font family and size, bold, italic, underline, strikeout, mixed-style range formatting, canonical runs, style-preserving replacement, highlight, colors, alignment, bullets, numbering, heading styles, date/time and symbols. |
 | Ink | Mouse/touch/pen drawing; pressure-sensitive pen width where supplied; highlighter; stroke eraser; rectangles, ellipses, lines; one undo step per gesture. |
-| Content | Editable tables, PNG/JPEG/WebP images, embedded file attachments, checklists, tags, dividers, and starter templates. |
+| Content | In-place plain-text table cells, row/column insertion and deletion, transposition, quoted TSV clipboard transfer, PNG/JPEG/WebP images, embedded file attachments, checklists, tags, dividers, and starter templates. |
 | Retrieval and history | Cross-notebook search, tagged-note navigation, replace-all, word count, undo/redo, manually saved page versions, recycle bin. |
 | View | Light/dark chrome, paper colors, ruled/grid/dotted paper, zoom, page-width fit, full-page view, collapsible navigation/ribbon, section tabs layout. |
 | Persistence | Debounced autosave, IndexedDB transactions in the browser, atomic desktop file replacement, and optimistic tokens that reject stale writes. |
@@ -174,9 +174,23 @@ The browser uses an IndexedDB database named `notespace-local-v1`. It is **local
 
 A save reads and compares the current token inside the same IndexedDB read/write transaction that writes the replacement. A stale editor is stopped instead of silently overwriting another tab’s work. This is conflict detection, not real-time collaboration or automatic merging. On conflict, export the current session and reload. A failed load does not replace existing stored data with the sample notebook.
 
-The desktop adapter uses an exclusive lock, a same-directory temporary file, and an atomic replacement. History is bounded to 100 transactions and approximately 32 MiB of serialized snapshot characters, retaining the most recent transaction. Page versions are explicit snapshots, up to 20 per page, and are included in backups.
+The desktop adapter uses an exclusive lock, a same-directory temporary file, and an atomic replacement. History is bounded to 100 transactions and approximately 32 MiB of serialized snapshot characters, retaining the most recent transaction. Page edits retain only the edited page; organization and import operations retain whole-workspace snapshots. Full workspace validation and aggregate size checks still run before page edits commit. Page versions are explicit snapshots, up to 20 per page, and are included in backups.
 
 Imports validate schema, unique identities, finite geometry, text ranges, enums, and collection limits. Current limits include 32 MiB JSON characters, 16 MiB per attachment, 16 megapixels per image/PNG export, and bounded page/ink/table sizes. Large content can hit the aggregate limit before individual limits. Notes and attachments are **not encrypted at rest**. See [SECURITY.md](SECURITY.md).
+
+## In-place tables
+
+Double-click a table cell to edit it directly on the page. **Tab / Shift+Tab** traverse cells; **Enter / Shift+Enter** move between rows. Moving past the final cell appends a row, subject to the size limit. **Escape** commits and leaves the editor. Use the **Table** ribbon for row/column insertion and deletion, clearing a cell, transposition and the whole-table editor.
+
+**Copy Table** writes tab-separated text to the system clipboard. **Paste Cells** parses a rectangular TSV range at the selected cell, growing the table as needed while preserving unaffected neighbors. Quoted fields retain embedded tabs, newlines and doubled quotes. Browser clipboard permission is required. A rejected paste does not partially alter the grid. Current growth limits are 476 rows, 50 columns, 100,000 characters per cell and 2 MiB clipboard characters; row height remains 42 document pixels.
+
+## Performance and diagnostics
+
+The Uno surface supplies a content revision to the renderer. Unchanged frames reuse a geometry index, text layouts, fonts and completed-ink recordings. Viewport queries avoid visiting every note or every point of an off-screen stroke; long notes draw only intersecting text lines, and tables draw only intersecting cells. A canonical style-run sweep replaces repeated scans through all marks while laying out rich text. Page and section lookups are indexed. Idle saves and hidden search-result rebuilds are skipped.
+
+`RendererStatistics` exposes CPU submission duration and work/cache counters. It does **not** report GPU completion time or display FPS. Cache limits bound entry counts, estimated text complexity and retained ink points, not total process/native memory. Direct mutable `PageRenderer` consumers can omit a revision to keep defensive invalidation; a supplied revision must change whenever content changes.
+
+CI runs the same [benchmark runner](tests/NoteSpace.Benchmarks/Program.cs) against this tree and baseline `b75a277`, on the same machine. The `notespace-browser-qa` artifact contains `bench-baseline.json`, `bench-current.json`, and `performance.md`. Seven-sample CPU medians and managed allocation counts are reported without flaky timing-based pass/fail thresholds. Executable correctness tests verify culling, cache reuse, retained/immediate pixels, transactional rollback and history retention. These are synthetic headless workloads, not an end-to-end browser, hardware GPU or OneNote comparison.
 
 ## Continuous integration and releases
 
@@ -192,7 +206,7 @@ This implementation provides working notebook interactions but **does not establ
 
 Not implemented: Microsoft `.one` / `.onepkg` compatibility, OneDrive/Microsoft 365 synchronization, authenticated collaboration, CRDT/merge-based editing, OCR, handwriting recognition, ink-to-math, audio/video recording, transcription, web clipping, Outlook integration, password-protected sections, advanced printing, or complete equation editing.
 
-Text layout is a custom Skia layout engine. Full script shaping, bidirectional layout, font fallback qualification, typography equivalence, and screen-reader semantics for canvas content remain work. The native input overlay displays a base text style while editing; selected-range styling appears in the Skia rendering after editing. Fonts depend on the host and may differ from Microsoft’s desktop fonts. Tables use a separate editor rather than OneNote’s in-place table interaction. Cross-section drag gestures, section/group drag-and-drop, mixed interleaving of sections and groups, and complete OneNote organization parity remain work. Cross-section page moves and cross-notebook section/group moves are available through dialogs.
+Text layout is a custom Skia layout engine. Full script shaping, bidirectional layout, font fallback qualification, typography equivalence, and screen-reader semantics for canvas content remain work. The native input overlay displays a base text style while editing; selected-range styling appears in the Skia rendering after editing. Fonts depend on the host and may differ from Microsoft’s desktop fonts. Table cells now have an in-place plain-text editor, keyboard traversal, row/column tools and TSV clipboard support. Rich cell formatting, merged cells, per-column resizing, arbitrary row heights and exact OneNote table behavior remain work; the separate whole-table editor is retained. Cross-section drag gestures, section/group drag-and-drop, mixed interleaving of sections and groups, and complete OneNote organization parity remain work. Cross-section page moves and cross-notebook section/group moves are available through dialogs.
 
 Markdown import supports plain paragraphs, headings and simple task prefixes. HTML/Markdown exports flatten free-form placement and do not include ink; use PNG or the native `.notespace` backup when those details matter. Very large-document performance, arbitrary attachments, native desktop file pickers, touch/stylus hardware, and assistive technology require broader qualification. The app cannot promise preservation of unsupported OneNote content.
 

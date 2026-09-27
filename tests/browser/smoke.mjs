@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { organizationWorkflows } from './organization.mjs';
+import { tableWorkflows } from './tables.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, stat, mkdir, writeFile } from 'node:fs/promises';
@@ -199,6 +200,8 @@ try {
     });
     assert.equal(conflict, true, 'IndexedDB rejects stale revisions atomically');
 
+    const tableTests = await tableWorkflows({ browser, output });
+
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const mobilePage = await mobile.newPage();
     await mobilePage.goto('http://127.0.0.1:4173/NoteSpace/', { waitUntil: 'domcontentloaded' });
@@ -206,8 +209,8 @@ try {
     await mobilePage.screenshot({ path: resolve(output, 'mobile.png') });
     await mobile.close();
     assert.deepEqual(errors, [], 'No unhandled browser errors');
-    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot', ...organizationTests] }, null, 2));
-    console.log(`PASS ${18 + organizationTests.length} browser workflows: editing, rich text, ink, organization, history, persistence, conflict, mobile`);
+    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot', ...organizationTests, ...tableTests] }, null, 2));
+    console.log(`PASS ${18 + organizationTests.length + tableTests.length} browser workflows: editing, rich text, ink, organization, history, persistence, conflict, mobile`);
 } catch (error) {
     await inputCheckpoint('failure-input-trace').catch(() => {});
     await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {});
