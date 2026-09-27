@@ -1,7 +1,4 @@
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using NoteSpace.Controls;
-using NoteSpace.Core;
 
 namespace NoteSpace.App;
 
@@ -11,8 +8,9 @@ public partial class App : Application
     public App() { InitializeComponent(); }
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        var workspace = SampleWorkspace.Create();
-        window = new Window { Title = "NoteSpace", Content = new NoteCanvas { Page = workspace.Notebooks[0].Sections[0].Pages[0] } };
+        var workspace = new WorkspaceView(new PlatformServices());
+        window = new Window { Title = "NoteSpace", Content = workspace };
+        window.Closed += (_, _) => workspace.Dispose();
         window.Activate();
     }
 }

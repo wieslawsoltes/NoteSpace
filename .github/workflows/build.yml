@@ -35,6 +35,22 @@ jobs:
           cp -a "$(dirname "$INDEX")/." artifacts/site/
           touch artifacts/site/.nojekyll
           test -f artifacts/site/index.html
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test runner
+        run: |
+          npm install --prefix tests/browser --no-audit --no-fund
+          cd tests/browser && npx playwright install --with-deps chromium
+      - name: Browser integration tests
+        run: node tests/browser/smoke.mjs
+      - name: Upload browser QA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notespace-browser-qa
+          path: artifacts/qa/
+          if-no-files-found: ignore
       - name: Build desktop application
         run: dotnet build src/NoteSpace.App/NoteSpace.App.csproj -c Release -f net10.0-desktop
       - name: Pack reusable libraries
