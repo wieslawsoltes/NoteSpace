@@ -1,3 +1,4 @@
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -5,6 +6,7 @@ using Microsoft.UI.Xaml.Media;
 using NoteSpace.Core;
 using NoteSpace.Editor;
 using Windows.System;
+using Windows.UI.Core;
 
 namespace NoteSpace.Controls;
 
@@ -78,9 +80,20 @@ public sealed partial class NoteSurface
         };
         box.TextChanged += (_, _) => { if (editor == box) PositionEditor(); };
         box.KeyDown += (_, e) => {
-            if (editingCell.HasValue && (e.Key == VirtualKey.Tab || e.Key == VirtualKey.Enter && !control))
-            { MoveTableCell(shift, e.Key == VirtualKey.Enter); e.Handled = true; }
-            else if (e.Key == VirtualKey.Escape || editingTitle && e.Key == VirtualKey.Enter) { EndEditing(); e.Handled = true; }
+            if (editor != box) return;
+            // Key-up may be consumed by the native TextBox or sent to the previous
+            // cell after focus changes. Query modifiers for this input message;
+            // cached bubbling flags can leave Shift or Control stuck.
+            var backwards = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
+            var controlDown = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
+            if (editingCell.HasValue && (e.Key == VirtualKey.Tab || e.Key == VirtualKey.Enter && !controlDown))
+            {
+                e.Handled = true;
+                var nextRow = e.Key == VirtualKey.Enter;
+                // Finish native key dispatch before replacing the focused control.
+                DispatcherQueue.TryEnqueue(() => { if (editor == box) MoveTableCell(backwards, nextRow); });
+            }
+            else if (e.Key == VirtualKey.Escape || editingTitle && e.Key == VirtualKey.Enter) { e.Handled = true; EndEditing(); }
         };
         box.LostFocus += (_, _) => { if (editor == box) FlushPendingText(); };
         void QueueFocus() => DispatcherQueue.TryEnqueue(() => {
