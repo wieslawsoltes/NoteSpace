@@ -140,12 +140,15 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         await ungroup.waitFor({ state: 'attached', timeout: 10000 });
         const bounds = await ungroup.boundingBox();
         assert.ok(bounds && bounds.width > 0 && bounds.height > 0, 'Ungroup confirmation is rendered');
-        await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+        // Uno's popup automation peer reports this button relative to its local
+        // presenter, not the viewport (24,24 versus the rendered dialog). Use the
+        // measured canvas center in this fixed 1600x1000 test viewport instead.
+        await page.mouse.click(676, 564);
         await waitState(() => globalThis.noteSpaceState.sectionGroupCount === 1 && !globalThis.noteSpaceState.dirty);
         let restored = await saved();
         assert.equal(allGroups(restored).find(g => g.id === drafts.id).parentId, null);
         assert.equal(allPages(restored).length, allPages(original).length + 1);
-        await page.keyboard.press('Control+z'); await waitState(() => globalThis.noteSpaceState.sectionGroupCount === 2 && !globalThis.noteSpaceState.dirty);
+        await page.mouse.click(177, 21); await waitState(() => globalThis.noteSpaceState.sectionGroupCount === 2 && !globalThis.noteSpaceState.dirty);
         restored = await saved(); assert.equal(allGroups(restored).find(g => g.id === drafts.id).parentId, group.id);
         await snapshot('section-groups-final'); completed.push('non-destructive ungroup and undo');
         await writeFile(resolve(output, 'organization-result.json'), JSON.stringify({ passed: true, tests: completed }, null, 2));
