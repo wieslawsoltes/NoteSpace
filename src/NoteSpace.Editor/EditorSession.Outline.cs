@@ -26,8 +26,12 @@ public sealed partial class EditorSession
 
     public void SetPageCollapsed(string pageId, bool collapsed)
     {
-        var (_, _, entry) = OutlineFor(pageId);
-        if (!entry.HasChildren || entry.Page.IsCollapsed == collapsed) return;
+        var (_, outlineBefore, entry) = OutlineFor(pageId);
+        var selectedDescendant = outlineBefore.Skip(entry.Index + 1).Take(entry.EndIndex - entry.Index - 1)
+            .Any(x => x.Page.Id == Document.Settings.SelectedPageId);
+        // Search can reveal a child without clearing the stored collapse flag.
+        // Collapsing that temporarily revealed group must still select its parent.
+        if (!entry.HasChildren || entry.Page.IsCollapsed == collapsed && !(collapsed && selectedDescendant)) return;
         Execute(collapsed ? "Collapse subpages" : "Expand subpages", w => {
             var (_, outline, current) = OutlineFor(pageId);
             current.Page.IsCollapsed = collapsed;

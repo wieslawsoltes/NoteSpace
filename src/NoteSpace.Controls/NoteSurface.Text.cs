@@ -68,8 +68,14 @@ public sealed partial class NoteSurface
         box.TextChanged += (_, _) => { if (updating || editor != box) return; pendingText = true; typingTimer.Stop(); typingTimer.Start(); PositionEditor(); DraftChanged?.Invoke(this, EventArgs.Empty); };
         box.KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape || editingTitle && e.Key == VirtualKey.Enter) { EndEditing(); e.Handled = true; } };
         box.LostFocus += (_, _) => { if (editor == box) FlushPendingText(); };
+        void QueueFocus() => DispatcherQueue.TryEnqueue(() => {
+            if (editor == box && box.IsLoaded) box.Focus(FocusState.Programmatic);
+        });
+        // Register before adding to an already loaded tree, then focus after the
+        // initiating accelerator/pointer event and layout have completed.
+        box.Loaded += (_, _) => QueueFocus();
         overlay.Children.Add(box); box.SelectionStart = box.Text.Length;
-        box.Loaded += (_, _) => box.Focus(FocusState.Programmatic); box.Focus(FocusState.Programmatic);
+        QueueFocus();
     }
     private void ApplyEditorStyle(TextBox box, TextFormat format)
     {

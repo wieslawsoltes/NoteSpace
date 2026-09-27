@@ -43,6 +43,14 @@ internal static class EditingRegressionTests
             var a = PageOutline.Build(s.FindSection(section)!.Pages);
             Check(PageOutline.Visible(a, ids[2]).Count == 4); Check(s.FindPage(ids[0])!.IsCollapsed && s.FindPage(ids[1])!.IsCollapsed);
         });
+        test("Collapsing a search-revealed group selects its parent even when already collapsed", () => {
+            var (s, section, ids) = Outline(0, 1, 2, 0);
+            s.SetPageCollapsed(ids[0], true); s.SelectPage(ids[2]);
+            Check(PageOutline.Visible(PageOutline.Build(s.FindSection(section)!.Pages), s.SelectedPage!.Id).Count == 4);
+            s.SetPageCollapsed(ids[0], true);
+            Check(s.SelectedPage!.Id == ids[0]);
+            Check(PageOutline.Visible(PageOutline.Build(s.FindSection(section)!.Pages), s.SelectedPage.Id).Count == 2);
+        });
         test("Collapsed state survives backup round trip", () => {
             var (s, _, ids) = Outline(0, 1); s.SetPageCollapsed(ids[0], true);
             Check(DocumentJson.Deserialize(DocumentJson.Serialize(s.Document)).Notebooks[0].Sections[0].Pages[0].IsCollapsed);

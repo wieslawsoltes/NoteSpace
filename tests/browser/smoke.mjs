@@ -34,6 +34,12 @@ async function settle() {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.waitForTimeout(150);
 }
+async function waitEditorFocus() {
+    await page.waitForFunction(() => {
+        const element = document.activeElement;
+        return element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') && element.id !== 'notespace-file-input';
+    }, null, { timeout: 10000 });
+}
 async function button(name, fallback) {
     const target = page.getByRole('button', { name, exact: true }).first();
     if (await target.isVisible().catch(() => false)) await target.click();
@@ -57,14 +63,14 @@ try {
     await page.mouse.click(1100, 700);
     await button('Add page (Ctrl+Alt+N)', () => page.keyboard.press('Control+Alt+n'));
     await waitState(() => globalThis.noteSpaceState?.pageCount === 6);
-    await settle();
+    await settle(); await waitEditorFocus();
     await page.keyboard.press('Control+a');
     await page.keyboard.type('Browser smoke test');
     await page.keyboard.press('Enter');
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Browser smoke test');
 
     await page.mouse.dblclick(670, 445, { delay: 100 });
-    await settle();
+    await settle(); await waitEditorFocus();
     await page.keyboard.type('A note created by real browser input.');
     await page.keyboard.press('Escape');
     await waitState(() => globalThis.noteSpaceState?.blockCount === 1 && !globalThis.noteSpaceState.dirty);
@@ -76,7 +82,7 @@ try {
 
     // Real native-input selections must preserve mixed styles when another
     // attribute is applied across the selection. Storage reads only observe results.
-    await page.mouse.dblclick(695, 463, { delay: 100 }); await settle();
+    await page.mouse.dblclick(695, 463, { delay: 100 }); await settle(); await waitEditorFocus();
     await page.keyboard.press('Control+Home');
     for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+ArrowRight');
     await page.keyboard.press('Control+b'); await settle();
@@ -117,11 +123,11 @@ try {
     // Create and traverse a real three-level page outline using UI accelerators.
     await page.keyboard.press('Control+Alt+Shift+n');
     await waitState(() => globalThis.noteSpaceState?.pageCount === 7 && globalThis.noteSpaceState.pageLevel === 1);
-    await settle(); await page.keyboard.press('Control+a'); await page.keyboard.type('Child page'); await page.keyboard.press('Enter');
+    await settle(); await waitEditorFocus(); await page.keyboard.press('Control+a'); await page.keyboard.type('Child page'); await page.keyboard.press('Enter');
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Child page');
     await page.keyboard.press('Control+Alt+Shift+n');
     await waitState(() => globalThis.noteSpaceState?.pageCount === 8 && globalThis.noteSpaceState.pageLevel === 2);
-    await settle(); await page.keyboard.press('Control+a'); await page.keyboard.type('Nested child'); await page.keyboard.press('Enter');
+    await settle(); await waitEditorFocus(); await page.keyboard.press('Control+a'); await page.keyboard.type('Nested child'); await page.keyboard.press('Enter');
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Nested child' && !globalThis.noteSpaceState.dirty);
     await page.screenshot({ path: resolve(output, 'page-outline.png') });
     await page.keyboard.press('F6'); await settle();
@@ -169,6 +175,10 @@ try {
     await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {});
     await writeFile(resolve(output, 'failure-dom.html'), await page.content()).catch(() => {});
     await writeFile(resolve(output, 'failure-state.json'), JSON.stringify(await state().catch(() => null), null, 2) || 'null');
+    await writeFile(resolve(output, 'failure-focus.json'), JSON.stringify(await page.evaluate(() => ({
+        active: document.activeElement?.outerHTML,
+        inputs: [...document.querySelectorAll('input,textarea')].map(element => ({ html: element.outerHTML, value: element.value, selectionStart: element.selectionStart, selectionEnd: element.selectionEnd }))
+    })).catch(() => null), null, 2));
     throw error;
 } finally {
     await writeFile(resolve(output, 'console.log'), logs.join('\n') + '\nERRORS\n' + errors.join('\n'));

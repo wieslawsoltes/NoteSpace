@@ -30,7 +30,9 @@ public sealed class PageListControl : UserControl
         root.Children.Add(header); Grid.SetRow(list, 1); root.Children.Add(list); Content = root;
         AutomationProperties.SetName(list, "Pages"); AutomationProperties.SetAutomationId(list, "page-outline");
         list.SelectionChanged += (_, _) => {
-            if (!binding && list.SelectedItem is ListViewItem { Tag: string id })
+            // Uno may deliver a selection notification after a rebind/layout pass.
+            // Re-selecting the current page would cancel a newly opened title editor.
+            if (!binding && list.SelectedItem is ListViewItem { Tag: string id } && id != selectedId)
             { restoreFocus = true; PageSelected?.Invoke(this, id); }
         };
         list.KeyDown += OnKeyDown;
