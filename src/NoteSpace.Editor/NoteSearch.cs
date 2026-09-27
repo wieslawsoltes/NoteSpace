@@ -102,7 +102,7 @@ public sealed partial class EditorSession
         var count = 0;
         bool Match(string text, out TextMatch match)
         {
-            match = query.Text.Length == 0 ? new(0, 0) : LiteralTextSearch.Find(text, query.Text, query.MatchCase, query.WholeWord).FirstOrDefault(new(-1, 0));
+            match = query.Text.Length == 0 ? new(0, 0) : LiteralTextSearch.Find(text, query.Text, query.MatchCase, query.WholeWord).FirstOrDefault(new TextMatch(-1, 0));
             return match.Start >= 0;
         }
         foreach (var (notebook, section, page) in SearchPages(query))
