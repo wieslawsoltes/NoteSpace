@@ -31,7 +31,7 @@ public sealed partial class NoteSurface
     private void RevealTableCell(NoteBlock table, TableCellAddress cell)
     {
         var bounds = NoteTable.CellBounds(table, cell);
-        var width = Math.Max(50, ActualWidth / Zoom); var height = Math.Max(50, ActualHeight / Zoom);
+        var width = (float)Math.Max(50, ActualWidth / Zoom); var height = (float)Math.Max(50, ActualHeight / Zoom);
         if (bounds.X < canvas.Options.OffsetX) canvas.Options.OffsetX = Math.Max(0, bounds.X - 8);
         else if (bounds.X + bounds.Width > canvas.Options.OffsetX + width) canvas.Options.OffsetX = Math.Max(0, bounds.X + bounds.Width - width + 8);
         if (bounds.Y < canvas.Options.OffsetY) canvas.Options.OffsetY = Math.Max(0, bounds.Y - 8);
