@@ -18,11 +18,11 @@
     <DefineConstants>$(DefineConstants);BROWSER_WASM</DefineConstants>
   </PropertyGroup>
   <ItemGroup Condition="$(TargetFramework.Contains('browserwasm'))">
-    <!-- Uno's bootstrapper initializes embedded JavaScript resources before Main. -->
     <EmbeddedResource Include="Platforms/WebAssembly/WasmScripts/NoteSpaceHost.js" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../NoteSpace.Controls/NoteSpace.Controls.csproj" />
     <ProjectReference Include="../NoteSpace.Storage/NoteSpace.Storage.csproj" />
+    <PackageReference Include="Uno.Fonts.OpenSans" Version="0.2.0" />
   </ItemGroup>
 </Project>

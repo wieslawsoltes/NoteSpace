@@ -28,5 +28,25 @@ Test("Text deletion clips formatting", () => { var b = new NoteBlock { Text = "H
 Test("Invalid text ranges rejected", () => Throws<ArgumentOutOfRangeException>(() => RichText.Apply(new NoteBlock { Text = "abc" }, 1, int.MaxValue, f => f.Bold = true)));
 Test("Version restore preserves history", () => { var s = new EditorSession(SampleWorkspace.Create()); var id = s.SelectedPage!.Id; var title = s.SelectedPage.Title; s.SaveVersion(id); s.RenamePage(id, "edited"); s.RestoreVersion(id, 0); Assert(s.FindPage(id)!.Title == title && s.FindPage(id)!.Versions.Count == 1); });
 Test("File store detects stale writes", () => { var folder = Path.Combine(Path.GetTempPath(), Ids.New()); Directory.CreateDirectory(folder); try { var store = new FileWorkspaceStore(Path.Combine(folder, "notebook.json")); var w = SampleWorkspace.Create(); var token = store.SaveAsync(w, null).GetAwaiter().GetResult(); Assert(store.LoadAsync().GetAwaiter().GetResult()!.Token == token); Throws<StorageConflictException>(() => store.SaveAsync(w, "stale").GetAwaiter().GetResult()); } finally { Directory.Delete(folder, true); } });
+Test("Oversized aggregate edits roll back atomically", () => {
+    var s = new EditorSession(SampleWorkspace.Create()); var before = DocumentJson.Serialize(s.Document);
+    Throws<InvalidDataException>(() => s.EditPage(s.SelectedPage!.Id, "Oversize", p => p.Blocks = Enumerable.Range(0, 17).Select(_ => new NoteBlock { Text = new string('x', 2 * 1024 * 1024) }).ToList()));
+    Assert(DocumentJson.Serialize(s.Document) == before); Assert(!s.CanUndo);
+});
+Test("Nested transactions are rejected and rolled back", () => {
+    var s = new EditorSession(SampleWorkspace.Create()); var before = DocumentJson.Serialize(s.Document);
+    Throws<InvalidOperationException>(() => s.Execute("Outer", w => { w.Notebooks[0].Title = "Changed"; s.Execute("Nested", _ => { }); }));
+    Assert(DocumentJson.Serialize(s.Document) == before); Assert(!s.CanUndo);
+});
+Test("Import preserves monotonically increasing revision", () => {
+    var s = new EditorSession(SampleWorkspace.Create()); s.Document.Revision = 42;
+    s.Replace(SampleWorkspace.Create()); Assert(s.Document.Revision == 43); s.Undo(); Assert(s.Document.Revision == 44);
+});
+Test("A rejected edit does not discard redo history", () => {
+    var s = new EditorSession(SampleWorkspace.Create()); var id = s.SelectedPage!.Id;
+    s.RenamePage(id, "Retained redo"); s.Undo();
+    Throws<InvalidDataException>(() => s.EditPage(id, "Invalid", p => p.Blocks[0].Width = -1));
+    Assert(s.CanRedo); s.Redo(); Assert(s.SelectedPage!.Title == "Retained redo");
+});
 Console.WriteLine($"\n{passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;

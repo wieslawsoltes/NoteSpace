@@ -10,14 +10,14 @@ public sealed class NoteTableEditor : UserControl
     private readonly OfficeTheme theme;
     private readonly Grid grid = new();
     private readonly StackPanel root = new() { Spacing = 8 };
+    private readonly StackPanel tools = new() { Orientation = Orientation.Horizontal, Spacing = 5 };
     private TextBox? largeTable;
     public NoteTableEditor(IEnumerable<IEnumerable<string>> rows, OfficeTheme palette)
     {
         theme = palette; cells = rows.Select(r => r.ToList()).ToList();
         if (cells.Count == 0) cells.AddRange([new List<string> { "Heading 1", "Heading 2", "Heading 3" }, new List<string> { "", "", "" }, new List<string> { "", "", "" }]);
         var columns = Math.Max(1, cells.Max(r => r.Count)); foreach (var row in cells) while (row.Count < columns) row.Add("");
-        var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
-        tools.Children.Add(new OfficeButton("Add row", "add", () => { if (cells.Count >= 500) return; cells.Add(Enumerable.Repeat("", cells[0].Count).ToList()); Rebuild(); }, theme: theme));
+        tools.Children.Add(new OfficeButton("Add row", "add", () => { if (cells.Count >= 476) return; cells.Add(Enumerable.Repeat("", cells[0].Count).ToList()); Rebuild(); }, theme: theme));
         tools.Children.Add(new OfficeButton("Add column", "add", () => { if (cells[0].Count >= 50) return; foreach (var row in cells) row.Add(""); Rebuild(); }, theme: theme));
         tools.Children.Add(new OfficeButton("Remove row", "", () => { if (cells.Count > 1) { cells.RemoveAt(cells.Count - 1); Rebuild(); } }, theme: theme));
         tools.Children.Add(new OfficeButton("Remove column", "", () => { if (cells[0].Count > 1) { foreach (var row in cells) row.RemoveAt(row.Count - 1); Rebuild(); } }, theme: theme));
@@ -30,9 +30,15 @@ public sealed class NoteTableEditor : UserControl
     private void Rebuild()
     {
         grid.Children.Clear(); grid.RowDefinitions.Clear(); grid.ColumnDefinitions.Clear();
-        if (cells.Count * cells[0].Count > 400)
+        var isLarge = cells.Count * cells[0].Count > 400;
+        // In TSV mode the text is the working copy. Do not rebuild it from stale grid cells.
+        // Row/column edits remain available by editing the TSV itself, then saving.
+        tools.IsHitTestVisible = !isLarge;
+        tools.Opacity = isLarge ? 0.45 : 1;
+        foreach (var child in tools.Children.OfType<Control>()) child.IsEnabled = !isLarge;
+        if (isLarge)
         {
-            largeTable = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap, Text = string.Join("\n", cells.Select(r => string.Join("\t", r))), Width = 740, Height = 380, FontSize = 13, Header = "Large table — tab-separated cells, one row per line" };
+            largeTable = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap, Text = string.Join("\n", cells.Select(r => string.Join("\t", r))), Width = 740, Height = 380, FontSize = 13, MaxLength = 2 * 1024 * 1024, Header = "Large table — tab-separated cells, one row per line" };
             grid.Children.Add(largeTable); return;
         }
         largeTable = null;

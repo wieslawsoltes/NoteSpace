@@ -27,19 +27,29 @@ const errors = []; const logs = [];
 page.on('pageerror', error => errors.push(error.message));
 page.on('console', message => logs.push(`${message.type()}: ${message.text()}`));
 page.on('dialog', async dialog => { await dialog.dismiss(); });
-const waitState = fn => page.waitForFunction(fn, null, { timeout: 150000 });
+const waitState = fn => page.waitForFunction(fn, null, { timeout: 45000 });
 const state = () => page.evaluate(() => globalThis.noteSpaceState);
+// Skia hit-test geometry updates on the next compositor frame, not the DOM click task.
+async function settle() {
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await page.waitForTimeout(150);
+}
 async function button(name, fallback) {
     const target = page.getByRole('button', { name, exact: true }).first();
     if (await target.isVisible().catch(() => false)) await target.click();
     else await fallback();
+    await settle();
 }
 try {
     await page.goto('http://127.0.0.1:4173/NoteSpace/', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => globalThis.noteSpaceState?.ready, null, { timeout: 150000 });
+    assert.ok(!(await state()).status.includes('unavailable'), 'Storage initialized successfully');
     await waitState(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty);
+    await settle();
     const initial = await state();
     assert.equal(initial.pageTitle, 'Welcome to NoteSpace');
     assert.equal(initial.pageCount, 5);
+    assert.equal(initial.status, 'Saved on this device');
     await page.screenshot({ path: resolve(output, 'desktop.png') });
     await writeFile(resolve(output, 'initial-state.json'), JSON.stringify(initial, null, 2));
     await writeFile(resolve(output, 'initial-dom.html'), await page.content());
@@ -47,22 +57,26 @@ try {
     await page.mouse.click(1100, 700);
     await button('Add page (Ctrl+Alt+N)', () => page.keyboard.press('Control+Alt+n'));
     await waitState(() => globalThis.noteSpaceState?.pageCount === 6);
+    await settle();
     await page.keyboard.press('Control+a');
     await page.keyboard.type('Browser smoke test');
     await page.keyboard.press('Enter');
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Browser smoke test');
 
     await page.mouse.dblclick(670, 445, { delay: 100 });
+    await settle();
     await page.keyboard.type('A note created by real browser input.');
     await page.keyboard.press('Escape');
     await waitState(() => globalThis.noteSpaceState?.blockCount === 1 && !globalThis.noteSpaceState.dirty);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitState(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty);
+    await settle();
     assert.equal((await state()).pageTitle, 'Browser smoke test');
     assert.equal((await state()).blockCount, 1);
 
     await button('Draw', () => page.mouse.click(218, 60));
-    await button('Pen', () => page.mouse.click(219, 120));
+    await page.screenshot({ path: resolve(output, 'draw-tab.png') });
+    await button('Pen', () => page.mouse.click(212, 120));
     await waitState(() => globalThis.noteSpaceState?.tool === 'Pen');
     await page.mouse.move(740, 590); await page.mouse.down();
     await page.mouse.move(785, 550, { steps: 8 }); await page.mouse.move(855, 600, { steps: 12 }); await page.mouse.up();

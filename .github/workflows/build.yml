@@ -56,6 +56,12 @@ jobs:
           cp -a "$(dirname "$INDEX")/." artifacts/site/
           touch artifacts/site/.nojekyll
           test -f artifacts/site/index.html
+      - name: Upload browser build for verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: notespace-browser-build
+          path: artifacts/site/
+          include-hidden-files: true
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
