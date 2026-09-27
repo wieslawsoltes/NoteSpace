@@ -39,8 +39,12 @@ jobs:
             echo 'Invalid package version'; exit 1
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-      - name: Run portable specifications
-        run: dotnet run --project tests/NoteSpace.Tests -c Release
+      - name: Run portable and rendering specifications
+        shell: bash
+        run: |
+          mkdir -p artifacts/qa
+          dotnet run --project tests/NoteSpace.Tests -c Release 2>&1 | tee artifacts/qa/portable-tests.log
+          dotnet run --project tests/NoteSpace.Rendering.Tests -c Release 2>&1 | tee artifacts/qa/rendering-tests.log
       - name: Build browser
         run: |
           dotnet workload install wasm-tools
@@ -62,6 +66,12 @@ jobs:
             dotnet pack "src/NoteSpace.$name/NoteSpace.$name.csproj" -c Release -o artifacts/packages -p:Version="$VERSION"
           done
           (cd artifacts/site && zip -qr "../NoteSpace-browser-$VERSION.zip" .)
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          for file in artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip; do
+            (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
+          done > artifacts/SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -74,6 +84,7 @@ jobs:
           path: |
             artifacts/packages/*.nupkg
             artifacts/NoteSpace-browser-*.zip
+            artifacts/SHA256SUMS
       - name: Publish GitHub release for version tag
         if: github.ref_type == 'tag'
         env:
@@ -81,7 +92,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip --clobber
+            gh release upload "$TAG" artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip artifacts/SHA256SUMS --clobber
           else
-            gh release create "$TAG" artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip --verify-tag --title "NoteSpace $VERSION" --generate-notes
+            gh release create "$TAG" artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip artifacts/SHA256SUMS --verify-tag --title "NoteSpace $VERSION" --generate-notes
           fi

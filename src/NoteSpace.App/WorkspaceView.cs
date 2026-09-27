@@ -73,6 +73,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         search.ResultSelected += (_, hit) => Navigate(hit.PageId, hit.BlockId);
         topSearch.TextChanged += (_, _) => { searchOpen = topSearch.Text.Length > 0; search.QueryBox.Text = topSearch.Text; ApplyLayout(); UpdateSearch(); };
         saveTimer.Tick += async (_, _) => { saveTimer.Stop(); await SaveAsync(); };
+        AddShortcut(VirtualKey.F6, VirtualKeyModifiers.None, "focus-pages");
         AddShortcut(VirtualKey.S, VirtualKeyModifiers.Control, "save");
         AddShortcut(VirtualKey.F, VirtualKeyModifiers.Control, "search");
         AddShortcut(VirtualKey.Z, VirtualKeyModifiers.Control, "undo");
@@ -81,6 +82,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         AddShortcut(VirtualKey.I, VirtualKeyModifiers.Control, "italic");
         AddShortcut(VirtualKey.U, VirtualKeyModifiers.Control, "underline");
         AddShortcut(VirtualKey.N, VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu, "new-page");
+        AddShortcut(VirtualKey.N, VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu | VirtualKeyModifiers.Shift, "new-subpage");
         KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape) { backstage.Visibility = Visibility.Collapsed; searchOpen = false; ApplyLayout(); } };
         SizeChanged += (_, _) => ApplyLayout();
         Loaded += async (_, _) => { if (!ready && !initializing) await InitializeAsync(); };

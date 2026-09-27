@@ -21,12 +21,17 @@ public sealed partial class EditorSession
     }
     public void EditPage(string pageId, string label, Action<NotePage> edit, bool structure = false) => Execute(label, _ => { var p = FindPage(pageId) ?? throw new ArgumentException("Page not found."); edit(p); p.Modified = DateTimeOffset.Now; }, structure);
     public void RenamePage(string pageId, string title) => EditPage(pageId, "Rename page", p => p.Title = CleanTitle(title), true);
+    // Deleting a parent preserves its descendants and promotes them one level.
     public void DeletePage(string pageId)
     {
+        var (section, _, entry) = OutlineFor(pageId);
         Execute("Delete page", w => {
-            var item = Pages.First(p => p.Page.Id == pageId);
-            w.Trash.Add(new DeletedPage { SectionId = item.Section.Id, Page = item.Page }); item.Section.Pages.Remove(item.Page);
-            if (w.Settings.SelectedPageId == pageId) w.Settings.SelectedPageId = item.Section.Pages.FirstOrDefault()?.Id ?? Pages.FirstOrDefault().Page?.Id;
+            PageOutline.Normalize(section.Pages);
+            for (var i = entry.Index + 1; i < entry.EndIndex; i++) section.Pages[i].Level--;
+            w.Trash.Add(new DeletedPage { SectionId = section.Id, Page = entry.Page });
+            section.Pages.RemoveAt(entry.Index);
+            if (w.Settings.SelectedPageId == pageId)
+                w.Settings.SelectedPageId = section.Pages.ElementAtOrDefault(Math.Min(entry.Index, section.Pages.Count - 1))?.Id ?? Pages.FirstOrDefault().Page?.Id;
         }, true);
     }
     public void RestorePage(string pageId, string? destinationSectionId = null)
@@ -34,20 +39,19 @@ public sealed partial class EditorSession
         Execute("Restore page", w => {
             var item = w.Trash.First(d => d.Page.Id == pageId);
             var section = FindSection(destinationSectionId ?? item.SectionId) ?? w.Notebooks.SelectMany(n => n.Sections).FirstOrDefault() ?? throw new InvalidOperationException("Create a section before restoring.");
+            item.Page.Level = 0; item.Page.IsCollapsed = false;
             section.Pages.Add(item.Page); w.Trash.Remove(item); w.Settings.SelectedPageId = item.Page.Id;
         }, true);
     }
     public NotePage DuplicatePage(string pageId)
     {
         var source = Pages.First(x => x.Page.Id == pageId);
-        var p = DocumentJson.ReadPage(DocumentJson.PageJson(source.Page)); p.Id = Ids.New(); p.Title = CleanTitle(p.Title + " (copy)"); p.Versions.Clear();
+        var (_, _, entry) = OutlineFor(pageId);
+        var p = DocumentJson.ReadPage(DocumentJson.PageJson(source.Page)); p.Id = Ids.New(); p.Title = CleanTitle(p.Title + " (copy)"); p.Versions.Clear(); p.Level = entry.Level; p.IsCollapsed = false; p.Created = p.Modified = DateTimeOffset.Now;
         foreach (var b in p.Blocks) b.Id = Ids.New(); foreach (var s in p.Ink) s.Id = Ids.New();
-        Execute("Duplicate page", w => { source.Section.Pages.Insert(source.Section.Pages.IndexOf(source.Page) + 1, p); w.Settings.SelectedPageId = p.Id; }, true); return p;
+        Execute("Duplicate page", w => { PageOutline.Normalize(source.Section.Pages); source.Section.Pages.Insert(entry.EndIndex, p); w.Settings.SelectedPageId = p.Id; }, true); return p;
     }
-    public void MovePage(string pageId, string sectionId, int index)
-    {
-        Execute("Move page", _ => { var source = Pages.First(x => x.Page.Id == pageId); var target = FindSection(sectionId) ?? throw new ArgumentException("Section not found."); source.Section.Pages.Remove(source.Page); target.Pages.Insert(Math.Clamp(index, 0, target.Pages.Count), source.Page); }, true);
-    }
+    public void MovePage(string pageId, string sectionId, int index) => MovePageGroup(pageId, sectionId, index);
     public void AddBlock(string pageId, NoteBlock block) => EditPage(pageId, "Insert note", p => p.Blocks.Add(block));
     public void DeleteBlock(string pageId, string blockId) => EditPage(pageId, "Delete note", p => p.Blocks.RemoveAll(b => b.Id == blockId));
     public void UpdateText(string pageId, string blockId, string text) => EditPage(pageId, "Edit text", p => { var b = p.Blocks.First(b => b.Id == blockId); RichText.Replace(b, text); });
@@ -76,40 +80,4 @@ public sealed partial class EditorSession
         }
     }
     public static string CleanTitle(string title) => string.IsNullOrWhiteSpace(title) ? "Untitled" : title.Trim()[..Math.Min(title.Trim().Length, 500)];
-}
-
-public static class RichText
-{
-    // Preserve formatting outside the minimal replaced range, including surrogate pairs.
-    public static void Replace(NoteBlock block, string value)
-    {
-        var old = block.Text; var prefix = 0;
-        while (prefix < old.Length && prefix < value.Length && old[prefix] == value[prefix]) prefix++;
-        if (prefix > 0 && prefix < old.Length && char.IsLowSurrogate(old[prefix])) prefix--;
-        var suffix = 0;
-        while (suffix < old.Length - prefix && suffix < value.Length - prefix && old[old.Length - 1 - suffix] == value[value.Length - 1 - suffix]) suffix++;
-        if (suffix > 0 && suffix < old.Length && char.IsLowSurrogate(old[old.Length - suffix])) suffix--;
-        var removedEnd = old.Length - suffix; var delta = value.Length - old.Length;
-        var result = new List<TextMark>();
-        foreach (var m in block.Marks)
-        {
-            var end = m.Start + m.Length;
-            if (end <= prefix) result.Add(m);
-            else if (m.Start >= removedEnd) { m.Start += delta; result.Add(m); }
-            else
-            {
-                if (m.Start < prefix) result.Add(new TextMark { Start = m.Start, Length = prefix - m.Start, Format = DocumentJson.CloneFormat(m.Format), Link = m.Link });
-                if (end > removedEnd) result.Add(new TextMark { Start = removedEnd + delta, Length = end - removedEnd, Format = DocumentJson.CloneFormat(m.Format), Link = m.Link });
-            }
-        }
-        block.Text = value; block.Marks = result;
-    }
-    public static void Apply(NoteBlock block, int start, int length, Action<TextFormat> format, string? link = null)
-    {
-        if (start < 0 || length < 0 || (long)start + length > block.Text.Length) throw new ArgumentOutOfRangeException(nameof(start));
-        if (length == 0) { format(block.Format); return; }
-        var f = DocumentJson.CloneFormat(At(block, start)); format(f);
-        block.Marks.Add(new TextMark { Start = start, Length = length, Format = f, Link = link });
-    }
-    public static TextFormat At(NoteBlock b, int offset) => b.Marks.LastOrDefault(m => offset >= m.Start && offset < m.Start + m.Length)?.Format ?? b.Format;
 }

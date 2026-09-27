@@ -10,6 +10,16 @@ namespace NoteSpace.Controls;
 
 public sealed partial class NoteSurface
 {
+    public void ToggleFormat(Func<TextFormat, bool> read, Action<TextFormat, bool> write)
+    {
+        FlushPendingText();
+        if (SelectedBlock is not { } block) return;
+        var start = editor is not null && !editingTitle ? editor.SelectionStart : 0;
+        var length = editor is not null && !editingTitle ? editor.SelectionLength : 0;
+        var enabled = !RichText.AllHave(block, start, length, read);
+        FormatSelection(format => write(format, enabled));
+    }
+
     public void FormatSelection(Action<TextFormat> apply, string? link = null)
     {
         FlushPendingText(); if (SelectedBlock is not { } block || session is null || Page is null) return;
@@ -33,7 +43,7 @@ public sealed partial class NoteSurface
     }
     public void BeginEditTitle()
     {
-        if (Page is null) return; EndEditing(); editingPageId = Page.Id; editingTitle = true; editingBlockId = null;
+        if (Page is null) return; EndEditing(); if (HasPendingText) return; editingPageId = Page.Id; editingTitle = true; editingBlockId = null;
         CreateEditor(Page.Title, new TextFormat { FontSize = 32 }); canvas.Options.EditingTitle = true;
         PositionEditor(); canvas.Invalidate();
     }
@@ -53,13 +63,27 @@ public sealed partial class NoteSurface
     private void CreateEditor(string text, TextFormat format)
     {
         var box = new TextBox { Text = text, AcceptsReturn = !editingTitle, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(1), BorderBrush = OfficeTheme.Brush(OfficeTheme.Accent), Background = OfficeTheme.Brush(Dark ? 0xFF252525 : 0xFFFFFFFF), Padding = new Thickness(11, 9, 11, 8), MinWidth = 40, MinHeight = 32, MaxLength = editingTitle ? 500 : 2 * 1024 * 1024, IsSpellCheckEnabled = true };
-        editor = box; ApplyEditorStyle(box, format);
+        editor = box; committedText = text; pendingText = false; ApplyEditorStyle(box, format);
         AutomationProperties.SetName(box, editingTitle ? "Page title" : "Note text"); AutomationProperties.SetAutomationId(box, editingTitle ? "page-title-editor" : "note-text-editor");
-        box.TextChanged += (_, _) => { if (updating || editor != box) return; pendingText = true; typingTimer.Stop(); typingTimer.Start(); PositionEditor(); DraftChanged?.Invoke(this, EventArgs.Empty); };
+        // TextChanged can be coalesced by the native/Skia text bridge. Track the
+        // synchronous change as well, and always reconcile the actual value at commit.
+        box.TextChanging += (_, _) => {
+            if (editor != box) return;
+            pendingText = box.Text != committedText;
+            typingTimer.Stop(); if (pendingText) typingTimer.Start();
+            DraftChanged?.Invoke(this, EventArgs.Empty);
+        };
+        box.TextChanged += (_, _) => { if (editor == box) PositionEditor(); };
         box.KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape || editingTitle && e.Key == VirtualKey.Enter) { EndEditing(); e.Handled = true; } };
         box.LostFocus += (_, _) => { if (editor == box) FlushPendingText(); };
+        void QueueFocus() => DispatcherQueue.TryEnqueue(() => {
+            if (editor == box && box.IsLoaded) box.Focus(FocusState.Programmatic);
+        });
+        // Register before adding to an already loaded tree, then focus after the
+        // initiating accelerator/pointer event and layout have completed.
+        box.Loaded += (_, _) => QueueFocus();
         overlay.Children.Add(box); box.SelectionStart = box.Text.Length;
-        box.Loaded += (_, _) => box.Focus(FocusState.Programmatic); box.Focus(FocusState.Programmatic);
+        QueueFocus();
     }
     private void ApplyEditorStyle(TextBox box, TextFormat format)
     {
@@ -71,28 +95,42 @@ public sealed partial class NoteSurface
     }
     public void FlushPendingText()
     {
-        typingTimer.Stop(); if (!pendingText || editor is null || session is null || editingPageId is null) return;
-        var pageId = editingPageId; var blockId = editingBlockId; var text = editor.Text; var title = editingTitle;
-        pendingText = false; updating = true;
+        if (updating) return;
+        typingTimer.Stop();
+        if (editor is null || session is null || editingPageId is null) return;
+        var box = editor; var pageId = editingPageId; var blockId = editingBlockId;
+        var text = box.Text; var title = editingTitle;
+        // A notification is a scheduling hint, never proof that input is unchanged.
+        // Read the current TextBox value before navigation, export, or removal.
+        if (text == committedText) { pendingText = false; return; }
+        pendingText = true; updating = true;
+        var committed = false;
         try
         {
-            if (session.FindPage(pageId) is null) return;
+            if (session.FindPage(pageId) is null) throw new InvalidOperationException("The page being edited no longer exists.");
             if (title) session.RenamePage(pageId, text);
             else if (blockId is not null) session.EditPage(pageId, "Edit text", p => {
-                var b = p.Blocks.FirstOrDefault(b => b.Id == blockId); if (b is null) return;
+                var b = p.Blocks.FirstOrDefault(b => b.Id == blockId) ?? throw new InvalidOperationException("The note being edited no longer exists.");
                 RichText.Replace(b, text); b.Height = Math.Clamp(Renderer.MeasureHeight(b), 40, 20000);
             });
+            if (editor == box) committedText = text;
+            committed = true;
         }
-        catch (Exception e) { pendingText = true; Error?.Invoke(this, e.Message); }
-        finally { updating = false; }
+        catch (Exception e) { Error?.Invoke(this, e.Message); }
+        finally
+        {
+            updating = false;
+            pendingText = editor is not null && editor.Text != committedText;
+            if (committed && pendingText) typingTimer.Start();
+        }
         Refresh();
     }
-    public void EndEditing() { FlushPendingText(); if (!pendingText) CancelEditor(); }
+    public void EndEditing() { FlushPendingText(); if (!updating && !HasPendingText) CancelEditor(); }
     private void CancelEditor()
     {
         typingTimer.Stop(); var old = editor; editor = null;
         if (old is not null) overlay.Children.Remove(old);
-        editingPageId = null; editingBlockId = null; editingTitle = false; pendingText = false;
+        editingPageId = null; editingBlockId = null; editingTitle = false; pendingText = false; committedText = "";
         canvas.Options.EditingId = null; canvas.Options.EditingTitle = false; canvas.Invalidate();
     }
     private void PositionEditor()

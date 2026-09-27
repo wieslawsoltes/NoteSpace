@@ -45,6 +45,7 @@ public sealed class NotePage
     public DateTimeOffset Modified { get; set; } = DateTimeOffset.Now;
     public int Level { get; set; }
     public bool IsFavorite { get; set; }
+    public bool IsCollapsed { get; set; }
     public PaperStyle Paper { get; set; }
     public uint PaperColor { get; set; } = 0xFFFFFFFF;
     public List<NoteBlock> Blocks { get; set; } = [];
