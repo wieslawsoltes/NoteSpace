@@ -1,0 +1,73 @@
+name: Build, test and deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run portable specifications
+        run: dotnet run --project tests/NoteSpace.Tests -c Release
+      - name: Install WebAssembly workload
+        run: dotnet workload install wasm-tools
+      - name: Publish browser application
+        run: dotnet publish src/NoteSpace.App/NoteSpace.App.csproj -c Release -f net10.0-browserwasm -o artifacts/publish -p:WasmShellWebAppBasePath=/NoteSpace/
+      - name: Stage static site
+        shell: bash
+        run: |
+          INDEX=$(find artifacts/publish -name index.html -not -path '*/node_modules/*' | head -1)
+          test -n "$INDEX"
+          mkdir -p artifacts/site
+          cp -a "$(dirname "$INDEX")/." artifacts/site/
+          touch artifacts/site/.nojekyll
+          test -f artifacts/site/index.html
+      - name: Build desktop application
+        run: dotnet build src/NoteSpace.App/NoteSpace.App.csproj -c Release -f net10.0-desktop
+      - name: Pack reusable libraries
+        shell: bash
+        run: |
+          for name in Core Editor Storage Rendering.Skia Controls; do
+            dotnet pack "src/NoteSpace.$name/NoteSpace.$name.csproj" -c Release -o artifacts/packages
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notespace-packages
+          path: artifacts/packages/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notespace-browser
+          path: artifacts/site/
+          include-hidden-files: true
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          path: artifacts/site
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

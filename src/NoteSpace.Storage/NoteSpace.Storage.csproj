@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><IsPackable>true</IsPackable><Description>NoteSpace persistence contracts, atomic file storage, and interchange.</Description></PropertyGroup><ItemGroup><ProjectReference Include="../NoteSpace.Core/NoteSpace.Core.csproj" /></ItemGroup></Project>

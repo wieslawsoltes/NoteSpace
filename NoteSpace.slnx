@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NoteSpace.Core/NoteSpace.Core.csproj" />
+    <Project Path="src/NoteSpace.Editor/NoteSpace.Editor.csproj" />
+    <Project Path="src/NoteSpace.Storage/NoteSpace.Storage.csproj" />
+    <Project Path="src/NoteSpace.Rendering.Skia/NoteSpace.Rendering.Skia.csproj" />
+    <Project Path="src/NoteSpace.Controls/NoteSpace.Controls.csproj" />
+    <Project Path="src/NoteSpace.App/NoteSpace.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/"><Project Path="tests/NoteSpace.Tests/NoteSpace.Tests.csproj" /></Folder>
+</Solution>
