@@ -14,6 +14,7 @@ public sealed partial class NoteSurface : Grid, IDisposable
     private EditorSession? session;
     private TextBox? editor;
     private string? editingPageId, editingBlockId;
+    private string committedText = "";
     private bool editingTitle, updating, disposed, pendingText;
     private NoteBlock? copiedBlock;
     public event EventHandler? SelectionChanged;
@@ -29,7 +30,7 @@ public sealed partial class NoteSurface : Grid, IDisposable
     public float PenWidth { get; set; } = 3;
     public float Zoom => canvas.Options.Zoom;
     public bool Dark { get => canvas.Options.Dark; set { canvas.Options.Dark = value; Refresh(); } }
-    public bool HasPendingText => pendingText;
+    public bool HasPendingText => pendingText || editor is not null && editor.Text != committedText;
     public PageRenderer Renderer => canvas.Renderer;
     public EditorSession? Session
     {

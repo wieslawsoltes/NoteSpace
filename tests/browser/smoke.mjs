@@ -159,7 +159,9 @@ try {
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Child page');
     await page.keyboard.press('Control+Alt+Shift+n');
     await waitState(() => globalThis.noteSpaceState?.pageCount === 8 && globalThis.noteSpaceState.pageLevel === 2);
-    await settle(); await waitEditorFocus(); await page.keyboard.press('Control+a'); await page.keyboard.type('Nested child'); await page.keyboard.press('Enter');
+    await settle(); await waitEditorFocus(); await page.keyboard.press('Control+a'); await page.keyboard.type('Nested');
+    await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Nested' && !globalThis.noteSpaceState.dirty);
+    await waitEditorFocus(); await page.keyboard.type(' child'); await page.keyboard.press('Enter');
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Nested child' && !globalThis.noteSpaceState.dirty);
     await page.screenshot({ path: resolve(output, 'page-outline.png') });
     await page.keyboard.press('F6'); await settle();
@@ -171,6 +173,7 @@ try {
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Browser smoke test'); await settle();
     await page.keyboard.press('ArrowLeft');
     await waitState(() => globalThis.noteSpaceState?.pageCollapsed && globalThis.noteSpaceState.visiblePageCount === 4 && !globalThis.noteSpaceState.dirty);
+    await page.screenshot({ path: resolve(output, 'collapsed-pages.png') });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitState(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty); await settle();
     assert.equal((await state()).pageCollapsed, true); assert.equal((await state()).visiblePageCount, 4);
