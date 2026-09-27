@@ -119,7 +119,15 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
         // Once semantic focus is enabled, use pointer targeting instead of mixing
         // framework menu navigation with the browser's accessibility key handling.
-        await page.mouse.click(100, 413, { button: 'right' }); await settle();
+        // The framework can forward the enabling Space key to its first focused
+        // toolbar control. Restore navigation with a real click if that collapsed it.
+        const groupRow = page.locator(`[xamlautomationid="group-${group.id}"]`);
+        if (!await groupRow.count()) { await page.mouse.click(20, 20); await settle(); }
+        await groupRow.waitFor({ state: 'attached', timeout: 10000 });
+        const groupBounds = await groupRow.boundingBox();
+        assert.ok(groupBounds && groupBounds.width > 0, 'Section group is visible before opening its menu');
+        await page.mouse.click(groupBounds.x + groupBounds.width / 2, groupBounds.y + groupBounds.height / 2, { button: 'right' });
+        await settle();
         await snapshot('ungroup-menu');
         const menuItem = page.getByRole('menuitem', { name: 'Ungroup (keep all notes)', exact: true });
         await menuItem.waitFor({ state: 'attached', timeout: 10000 });

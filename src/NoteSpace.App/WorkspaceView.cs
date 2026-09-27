@@ -167,7 +167,13 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     {
         if (!ready && command != "about") return;
         try { await ExecuteCommandAsync(command, entityId); }
-        catch (Exception error) { await MessageAsync("Could not complete the action", error.Message); }
+        catch (Exception error)
+        {
+            // A rejected transaction rehydrates Document. Navigation controls must
+            // release the old DTO graph before their next pointer or menu event.
+            BindNavigation();
+            await MessageAsync("Could not complete the action", error.Message);
+        }
         UpdateStatus(); Report();
     }
     public void Dispose()
