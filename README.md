@@ -119,13 +119,15 @@ The renderer reuses geometry through `RenderOptions.ContentRevision`, completed-
 
 Advance the content revision after every mutation, including in-place changes to image bytes. Without a token, geometry and image content are processed defensively. `MaximumImageCacheBytes` defaults to **64 MiB of retained encoded-plus-decoded image payload**, also capped at 24 entries. Least-recently-used entries are evicted before replacement allocation; valid images larger than the cache budget are drawn transiently. This is not a bound on decoder temporaries, Skia object overhead, total application memory or GPU copies. Invalid image results are retained only for a stable revision. Dispose the renderer to release its native caches.
 
-Page edits retain only the edited page's before/after JSON. Global operations still use workspace snapshots. Full-workspace identity/content validation and aggregate JSON checks remain linear, and page drafts still copy attachments. Search scans existing strings/cells without constructing a concatenated table and stops at its result cap; cancellation is checked between pages, blocks and cells. Hidden searches and unchanged saves are skipped.
+Page edits retain only the edited page's before/after JSON. Global operations still use workspace snapshots. Full-workspace identity/content validation and aggregate JSON checks remain linear, and page drafts still copy attachments. Size-only checks stream the generated JSON into a UTF-16 character counter instead of allocating another whole-workspace string. Search scans existing strings/cells without constructing a concatenated table and stops at its result cap; cancellation is checked between pages, blocks and cells. Hidden searches and unchanged saves are skipped.
 
 CI runs the **same benchmark source against this code and baseline `b75a277` on the same runner**, recording seven-sample medians, managed allocations and retained history in `performance.md` and JSON artifacts. These are headless CPU/Skia workloads, **not browser FPS, GPU timings, startup or a Microsoft OneNote comparison**. Consult every workload, including regressions; no noisy timing threshold is used as a correctness gate.
 
 ## Persistence and data safety
 
 Browser data lives in IndexedDB `notespace-local-v1`, local to this profile and origin. Clearing site data, private browsing, profile loss or eviction can remove notes. **Local storage is not backup or cloud synchronization.** Export `.notespace` backups regularly. Notes and attachments are not encrypted at rest.
+
+Autosave captures a `WorkspaceSnapshot`: one immutable, validated JSON string independent of later edits. Built-in stores implement the optional `IWorkspaceSnapshotStore` fast path, eliminating the old clone/deserialization/re-serialization round trip. Existing `IWorkspaceStore` integrations remain supported. `WorkspaceSnapshot.Parse` validates external JSON before it can enter this path.
 
 A browser save compares its token and writes inside the same IndexedDB transaction. Desktop saves use an exclusive lock, same-directory temporary file and atomic replacement. Stale tabs are stopped, not silently merged: export the conflicted session and reload. Failed loads enter a non-saving recovery session rather than replacing stored data with sample content.
 

@@ -18,7 +18,9 @@ internal static class SnapshotTests
         test("Streaming size measurement equals the generated JSON string length", () => {
             foreach (var text in new[] { "", "ASCII", "quote\" backslash\\ newline\n", "żółć العربية 中文 😀", "\ud800", new string('x', 100000) })
             {
-                var w = Fixture(text); Check(WorkspaceSerialization.MeasureCharacters(w) == DocumentJson.Serialize(w).Length);
+                var w = Fixture(text); var expected = DocumentJson.Serialize(w).Length;
+                var measured = WorkspaceSerialization.MeasureCharacters(w);
+                if (measured != expected) throw new Exception($"Text length {text.Length}: expected {expected} JSON characters, measured {measured}.");
             }
         });
         test("Streaming size includes attachments histories groups and escaped characters", () => {
