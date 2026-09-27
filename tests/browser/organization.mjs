@@ -113,12 +113,18 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         completed.push('section group rename');
 
         stage = 'ungroup-section-group';
-        await page.mouse.click(100, 413, { button: 'right' }); await settle();
-        await page.keyboard.press('End'); await page.keyboard.press('Enter'); await settle();
+        // Enable the framework's public accessibility UI to locate dialog buttons
+        // by their rendered bounds. Mouse input still goes through the real canvas.
+        const enable = page.getByRole('button', { name: 'Enable accessibility', exact: true });
+        if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
+        // End is not handled by every platform menu; navigate explicit items instead.
+        await contextCommand(100, 413, 6);
         await snapshot('ungroup-confirmation');
-        // The confirmation defaults to Cancel. Move back to its primary Ungroup
-        // button and activate it, rather than accepting a destructive default.
-        await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Enter');
+        const ungroup = page.getByRole('button', { name: 'Ungroup', exact: true });
+        await ungroup.waitFor({ state: 'attached', timeout: 10000 });
+        const bounds = await ungroup.boundingBox();
+        assert.ok(bounds && bounds.width > 0 && bounds.height > 0, 'Ungroup confirmation is rendered');
+        await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
         await waitState(() => globalThis.noteSpaceState.sectionGroupCount === 1 && !globalThis.noteSpaceState.dirty);
         let restored = await saved();
         assert.equal(allGroups(restored).find(g => g.id === drafts.id).parentId, null);
