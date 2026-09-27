@@ -88,6 +88,7 @@ public sealed partial class WorkspaceView
         var state = new RuntimeState
         {
             Ready = ready, PageTitle = CurrentPage?.Title, PageId = CurrentPage?.Id,
+            PageLevel = CurrentPage?.Level ?? 0, PageCollapsed = CurrentPage?.IsCollapsed ?? false, VisiblePageCount = pages.VisiblePageCount,
             PageCount = session.Pages.Count(), BlockCount = CurrentPage?.Blocks.Count ?? 0,
             InkCount = CurrentPage?.Ink.Count ?? 0, Revision = session.Document.Revision,
             Dirty = changes != savedChanges || surface.HasPendingText, Status = saveStatus,
@@ -103,6 +104,9 @@ internal sealed class RuntimeState
     public bool Ready { get; set; }
     public string? PageTitle { get; set; }
     public string? PageId { get; set; }
+    public int PageLevel { get; set; }
+    public bool PageCollapsed { get; set; }
+    public int VisiblePageCount { get; set; }
     public int PageCount { get; set; }
     public int BlockCount { get; set; }
     public int InkCount { get; set; }

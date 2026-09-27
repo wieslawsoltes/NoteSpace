@@ -13,6 +13,7 @@ public sealed partial class WorkspaceView
         var pageId = session.FindPage(entityId)?.Id ?? CurrentPage?.Id;
         switch (command)
         {
+            case "focus-pages": surface.EndEditing(); focusMode = false; navigationOpen = true; ApplyLayout(); pages.FocusSelectedPage(); return;
             case "file": surface.EndEditing(); backstage.Show(session.Document, theme); return;
             case "save": await SaveAsync(); return;
             case "export": case "markdown": case "html": case "png": await ExportAsync(command); return;
@@ -32,10 +33,10 @@ public sealed partial class WorkspaceView
                 if (!surface.PasteSelected()) await MessageAsync("Paste text or notes", "Copy a note container with Home → Copy, then paste it here. Inside a text container, use the native Ctrl+V or ⌘V shortcut to paste text from another application.");
                 return;
             case "delete-block": surface.DeleteSelected(); return;
-            case "bold": Format(f => f.Bold = !f.Bold); return;
-            case "italic": Format(f => f.Italic = !f.Italic); return;
-            case "underline": Format(f => f.Underline = !f.Underline); return;
-            case "strike": Format(f => f.Strike = !f.Strike); return;
+            case "bold": ToggleFormat(f => f.Bold, (f, value) => f.Bold = value); return;
+            case "italic": ToggleFormat(f => f.Italic, (f, value) => f.Italic = value); return;
+            case "underline": ToggleFormat(f => f.Underline, (f, value) => f.Underline = value); return;
+            case "strike": ToggleFormat(f => f.Strike, (f, value) => f.Strike = value); return;
             case "font-up": Format(f => f.FontSize = Math.Min(144, f.FontSize + 2)); return;
             case "font-down": Format(f => f.FontSize = Math.Max(6, f.FontSize - 2)); return;
             case "font":
@@ -44,11 +45,11 @@ public sealed partial class WorkspaceView
             case "text-color":
                 var color = await ColorDialogAsync("Font color", surface.SelectedBlock?.Format.Color ?? 0xFF242424);
                 if (color is not null) Format(f => f.Color = color.Value); return;
-            case "text-highlight": Format(f => f.Highlight = f.Highlight == 0 ? 0xFFFFE77A : 0); return;
+            case "text-highlight": ToggleFormat(f => f.Highlight != 0, (f, value) => f.Highlight = value ? 0xFFFFE77A : 0); return;
             case "clear-format":
                 EditSelected("Clear formatting", b => { b.Format = new TextFormat(); b.Marks.Clear(); }); return;
-            case "bullets": Format(f => { f.Bullets = !f.Bullets; f.Numbered = false; }); return;
-            case "numbered": Format(f => { f.Numbered = !f.Numbered; f.Bullets = false; }); return;
+            case "bullets": ToggleFormat(f => f.Bullets, (f, value) => { f.Bullets = value; f.Numbered = false; }); return;
+            case "numbered": ToggleFormat(f => f.Numbered, (f, value) => { f.Numbered = value; f.Bullets = false; }); return;
             case "align-left": Format(f => f.Alignment = 0); return;
             case "align-center": Format(f => f.Alignment = 1); return;
             case "align-right": Format(f => f.Alignment = 2); return;
@@ -134,6 +135,10 @@ public sealed partial class WorkspaceView
         }
     }
     private float NextY() => Math.Min(99000, Math.Max(145, (CurrentPage?.Blocks.Select(b => b.Y + b.Height).DefaultIfEmpty(120).Max() ?? 120) + 24));
+    private void ToggleFormat(Func<TextFormat, bool> read, Action<TextFormat, bool> write)
+    {
+        if (surface.SelectedBlock is null) surface.NewText(); surface.ToggleFormat(read, write);
+    }
     private void Format(Action<TextFormat> action)
     {
         if (surface.SelectedBlock is null) surface.NewText(); surface.FormatSelection(action);

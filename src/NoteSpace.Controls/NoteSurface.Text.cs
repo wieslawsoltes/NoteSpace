@@ -10,6 +10,16 @@ namespace NoteSpace.Controls;
 
 public sealed partial class NoteSurface
 {
+    public void ToggleFormat(Func<TextFormat, bool> read, Action<TextFormat, bool> write)
+    {
+        FlushPendingText();
+        if (SelectedBlock is not { } block) return;
+        var start = editor is not null && !editingTitle ? editor.SelectionStart : 0;
+        var length = editor is not null && !editingTitle ? editor.SelectionLength : 0;
+        var enabled = !RichText.AllHave(block, start, length, read);
+        FormatSelection(format => write(format, enabled));
+    }
+
     public void FormatSelection(Action<TextFormat> apply, string? link = null)
     {
         FlushPendingText(); if (SelectedBlock is not { } block || session is null || Page is null) return;

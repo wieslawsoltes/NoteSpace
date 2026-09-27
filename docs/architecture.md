@@ -37,3 +37,9 @@ Markdown/HTML export is a reading-order conversion, not a pixel-perfect page for
 Add domain operations to Editor, native rendering to Rendering.Skia, host-independent UI to Controls, and service coordination to App. Implement a remote `IWorkspaceStore` for a server-backed store, but introduce an explicit authentication, authorization, merge, and offline synchronization design before advertising multi-user collaboration.
 
 A new ribbon command needs an actual handler and executable verification. Do not add decorative buttons that imply an unsupported capability. New model fields should include round-trip, validation, undo/redo, and export behavior where appropriate.
+
+## Outline and range-editing contracts
+
+`PageOutline` is a linear-time read-only projection of section order: each entry includes its effective depth, parent index, and exclusive subtree end. It accepts older orphan indentation defensively; transaction-based organization commands normalize only affected sections. Persisted `NotePage.IsCollapsed` remains compatible with schema-1 files that omit the property. `PageListControl` delegates commands to its host and uses this projection for disclosure, keyboard navigation, and search-target reveal. Recent order is a view, not a destructive sort.
+
+`RichText.GetRuns` resolves legacy overlapping marks using an event sweep and last-mark-wins ordering. Range formatting splits at run boundaries and retains unrelated attributes and hyperlinks. Edits write back canonical, non-overlapping marks. `ReplaceRange` uses explicit UTF-16 ranges; whole-value native input uses a minimal-difference adapter. `ReplaceAll` walks non-overlapping ordinal matches and preserves intervening runs. These operations do not provide full Unicode grapheme editing, script shaping, or an in-place rich-text input control. Wrap direct mutations in `EditorSession.EditPage` to get validation, rollback, undo and autosave notification.

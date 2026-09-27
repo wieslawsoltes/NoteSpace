@@ -40,9 +40,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Run portable and rendering specifications
+        shell: bash
         run: |
-          dotnet run --project tests/NoteSpace.Tests -c Release
-          dotnet run --project tests/NoteSpace.Rendering.Tests -c Release
+          mkdir -p artifacts/qa
+          dotnet run --project tests/NoteSpace.Tests -c Release 2>&1 | tee artifacts/qa/portable-tests.log
+          dotnet run --project tests/NoteSpace.Rendering.Tests -c Release 2>&1 | tee artifacts/qa/rendering-tests.log
       - name: Install WebAssembly workload
         run: dotnet workload install wasm-tools
       - name: Publish browser application

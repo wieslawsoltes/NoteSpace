@@ -74,6 +74,30 @@ try {
     assert.equal((await state()).pageTitle, 'Browser smoke test');
     assert.equal((await state()).blockCount, 1);
 
+    // Real native-input selections must preserve mixed styles when another
+    // attribute is applied across the selection. Storage reads only observe results.
+    await page.mouse.dblclick(695, 463, { delay: 100 }); await settle();
+    await page.keyboard.press('Control+Home');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+ArrowRight');
+    await page.keyboard.press('Control+b'); await settle();
+    await page.keyboard.press('Control+End');
+    for (let i = 0; i < 6; i++) await page.keyboard.press('Shift+ArrowLeft');
+    await page.keyboard.press('Control+i'); await settle();
+    await page.keyboard.press('Control+a'); await page.keyboard.press('Control+u'); await settle();
+    await page.keyboard.press('Escape');
+    await waitState(() => globalThis.noteSpaceState?.blockCount === 1 && !globalThis.noteSpaceState.dirty);
+    const styled = await page.evaluate(async () => {
+        const stored = await globalThis.NoteSpaceHost.load();
+        const workspace = JSON.parse(stored.slice(stored.indexOf('\n') + 1));
+        const current = workspace.notebooks.flatMap(n => n.sections).flatMap(s => s.pages).find(p => p.id === workspace.settings.selectedPageId);
+        return current.blocks[0];
+    });
+    assert.equal(styled.text, 'A note created by real browser input.');
+    assert.ok(styled.marks.some(m => m.start === 0 && m.format.bold), 'Initial bold range is preserved');
+    assert.ok(styled.marks.some(m => m.start + m.length === styled.text.length && m.format.italic), 'Final italic range is preserved');
+    assert.ok(styled.marks.every(m => m.format.underline), 'Underline applies uniformly across mixed styles');
+    await page.screenshot({ path: resolve(output, 'rich-text.png') });
+
     await button('Draw', () => page.mouse.click(218, 60));
     await page.screenshot({ path: resolve(output, 'draw-tab.png') });
     await button('Pen', () => page.mouse.click(212, 120));
@@ -89,6 +113,39 @@ try {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitState(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty);
     assert.equal((await state()).inkCount, 1);
+
+    // Create and traverse a real three-level page outline using UI accelerators.
+    await page.keyboard.press('Control+Alt+Shift+n');
+    await waitState(() => globalThis.noteSpaceState?.pageCount === 7 && globalThis.noteSpaceState.pageLevel === 1);
+    await settle(); await page.keyboard.press('Control+a'); await page.keyboard.type('Child page'); await page.keyboard.press('Enter');
+    await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Child page');
+    await page.keyboard.press('Control+Alt+Shift+n');
+    await waitState(() => globalThis.noteSpaceState?.pageCount === 8 && globalThis.noteSpaceState.pageLevel === 2);
+    await settle(); await page.keyboard.press('Control+a'); await page.keyboard.type('Nested child'); await page.keyboard.press('Enter');
+    await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Nested child' && !globalThis.noteSpaceState.dirty);
+    await page.screenshot({ path: resolve(output, 'page-outline.png') });
+    await page.keyboard.press('F6'); await settle();
+    await page.keyboard.press('ArrowLeft');
+    await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Child page'); await settle();
+    await page.keyboard.press('ArrowLeft');
+    await waitState(() => globalThis.noteSpaceState?.pageCollapsed && globalThis.noteSpaceState.visiblePageCount === 5); await settle();
+    await page.keyboard.press('ArrowLeft');
+    await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Browser smoke test'); await settle();
+    await page.keyboard.press('ArrowLeft');
+    await waitState(() => globalThis.noteSpaceState?.pageCollapsed && globalThis.noteSpaceState.visiblePageCount === 4 && !globalThis.noteSpaceState.dirty);
+    await page.screenshot({ path: resolve(output, 'collapsed-pages.png') });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitState(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty); await settle();
+    assert.equal((await state()).pageCollapsed, true); assert.equal((await state()).visiblePageCount, 4);
+    assert.equal((await state()).pageCount, 8);
+    await page.keyboard.press('F6'); await settle(); await page.keyboard.press('ArrowRight');
+    await waitState(() => globalThis.noteSpaceState?.visiblePageCount === 5 && !globalThis.noteSpaceState.pageCollapsed); await settle();
+    await page.keyboard.press('ArrowRight');
+    await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Child page' && globalThis.noteSpaceState.pageCollapsed); await settle();
+    await page.keyboard.press('ArrowRight');
+    await waitState(() => globalThis.noteSpaceState?.visiblePageCount === 6 && !globalThis.noteSpaceState.pageCollapsed); await settle();
+    await page.keyboard.press('ArrowRight');
+    await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Nested child' && !globalThis.noteSpaceState.dirty);
 
     const conflict = await page.evaluate(async () => {
         const stored = await globalThis.NoteSpaceHost.load();
@@ -106,8 +163,8 @@ try {
     await mobilePage.screenshot({ path: resolve(output, 'mobile.png') });
     await mobile.close();
     assert.deepEqual(errors, [], 'No unhandled browser errors');
-    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'atomic storage conflict', 'mobile boot'] }, null, 2));
-    console.log('PASS browser boot, editing, ink, undo/redo, persistence, storage conflict, and mobile boot');
+    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot'] }, null, 2));
+    console.log('PASS 18 browser workflows: editing, rich text, ink, history, page outline, persistence, conflict, mobile');
 } catch (error) {
     await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {});
     await writeFile(resolve(output, 'failure-dom.html'), await page.content()).catch(() => {});

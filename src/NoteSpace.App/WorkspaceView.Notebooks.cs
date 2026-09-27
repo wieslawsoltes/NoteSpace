@@ -58,18 +58,22 @@ public sealed partial class WorkspaceView
                 if (title is not null) session.RenamePage(pageId, title); return;
             case "duplicate-page": if (pageId is not null) Navigate(session.DuplicatePage(pageId).Id); return;
             case "delete-page":
-                if (pageId is not null && await ConfirmAsync("Delete page?", "The page will move to the notebook recycle bin. You can restore it from History.", "Delete")) session.DeletePage(pageId); return;
+                if (pageId is not null && await ConfirmAsync("Delete page?", "The page will move to the notebook recycle bin. Its subpages will stay in the section and move up one level. You can restore the page from History.", "Delete")) session.DeletePage(pageId); return;
             case "move-page":
                 if (pageId is null) return;
                 var destinations = session.Document.Notebooks.SelectMany(n => n.Sections.Select(s => (Notebook: n, Section: s))).ToList();
                 var targetIndex = await ChooseAsync("Move page to section", destinations.Select(x => x.Notebook.Title + " / " + x.Section.Title).ToList());
                 if (targetIndex is not null) { var target = destinations[targetIndex.Value].Section; session.MovePage(pageId, target.Id, target.Pages.Count); Navigate(pageId); } return;
+            case "new-subpage":
+                if (pageId is not null) { Navigate(session.AddSubpage(pageId).Id); surface.BeginEditTitle(); } return;
+            case "collapse-page": case "expand-page":
+                if (pageId is not null) session.SetPageCollapsed(pageId, command == "collapse-page"); return;
             case "page-up": case "page-down":
-                if (pageId is null) return;
-                var location = session.Pages.First(x => x.Page.Id == pageId);
-                session.MovePage(pageId, location.Section.Id, location.Section.Pages.IndexOf(location.Page) + (command == "page-up" ? -1 : 1)); BindNavigation(); return;
-            case "subpage": if (pageId is not null) session.EditPage(pageId, "Make subpage", p => p.Level = Math.Min(2, p.Level + 1), true); return;
-            case "promote-page": if (pageId is not null) session.EditPage(pageId, "Promote page", p => p.Level = Math.Max(0, p.Level - 1), true); return;
+                if (pageId is not null) session.MovePageSibling(pageId, command == "page-up" ? -1 : 1); return;
+            case "subpage":
+                if (pageId is not null && !session.IndentPage(pageId)) saveStatus = "Cannot indent: choose a following sibling within the two-level limit"; return;
+            case "promote-page":
+                if (pageId is not null) session.PromotePage(pageId); return;
             default: throw new InvalidOperationException("Unknown command: " + command);
         }
     }
@@ -108,8 +112,8 @@ public sealed partial class WorkspaceView
         session.Execute("Replace all", _ => {
             foreach (var (_, _, page) in session.Pages) foreach (var b in page.Blocks)
             {
-                var text = b.Text.Replace(find, replace, StringComparison.OrdinalIgnoreCase);
-                if (text != b.Text) { RichText.Replace(b, text); b.Height = Math.Max(b.Height, surface.Renderer.MeasureHeight(b)); page.Modified = DateTimeOffset.Now; count++; }
+                var replaced = RichText.ReplaceAll(b, find, replace);
+                if (replaced > 0) { b.Height = Math.Max(b.Height, surface.Renderer.MeasureHeight(b)); page.Modified = DateTimeOffset.Now; count++; }
                 foreach (var row in b.Cells) for (var i = 0; i < row.Count; i++) { var value = row[i].Replace(find, replace, StringComparison.OrdinalIgnoreCase); if (value != row[i]) { row[i] = value; page.Modified = DateTimeOffset.Now; count++; } }
             }
         });

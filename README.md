@@ -16,9 +16,9 @@ NoteSpace brings a OneNote-style desktop notebook workflow to **Uno Platform**, 
 
 | Area | Implemented workflow |
 | --- | --- |
-| Organization | Create and rename notebooks, sections, and pages; reorder sections/pages; move pages between sections; duplicate pages; subpage indentation; favorites; recover deleted pages. |
+| Organization | Create and rename notebooks, sections, and pages; reorder sections/pages; move pages between sections; duplicate pages; two-level subpage hierarchy with persistent collapse, keyboard navigation and subtree moves; favorites; recover deleted pages. |
 | Free-form editing | Double-click to create/edit text; move containers by their top grip; resize by their lower-right corner; edit page titles; copy/paste note containers. |
-| Text | Font family and size, bold, italic, underline, strikeout, selected-range formatting, highlight, colors, alignment, bullets, numbering, heading styles, date/time and symbols. |
+| Text | Font family and size, bold, italic, underline, strikeout, mixed-style range formatting, canonical runs, style-preserving replacement, highlight, colors, alignment, bullets, numbering, heading styles, date/time and symbols. |
 | Ink | Mouse/touch/pen drawing; pressure-sensitive pen width where supplied; highlighter; stroke eraser; rectangles, ellipses, lines; one undo step per gesture. |
 | Content | Editable tables, PNG/JPEG/WebP images, embedded file attachments, checklists, tags, dividers, and starter templates. |
 | Retrieval and history | Cross-notebook search, tagged-note navigation, replace-all, word count, undo/redo, manually saved page versions, recycle bin. |
@@ -36,7 +36,15 @@ Open the [browser application](https://wieslawsoltes.github.io/NoteSpace/). A sa
 4. Open **Draw** to choose a pen, highlighter, eraser, or shape. Scroll with the mouse wheel and pan with a middle-button drag.
 5. Use **File → Export notebook** to save a complete `.notespace` backup. HTML and Markdown exports are readable content exports; PNG preserves the rendered page appearance, including ink.
 
-Right-click a notebook, section, or page for its context menu. The **History** tab contains page versions and the recycle bin.
+Right-click a notebook, section, or page for its context menu. Choose **New subpage** to create a child, or **Make subpage** to indent a page beneath its previous sibling. Disclosure arrows expand or collapse a group. The **Order / Recent** button switches between hierarchy order and a flat recent list without changing stored order. The **History** tab contains page versions and the recycle bin.
+
+### Page organization and formatting
+
+A page can have two nested subpage levels. Reordering or moving to another section carries its complete subtree. Promotion places that subtree after the old parent's group, leaving its former siblings with the old parent. Deleting a page preserves its descendants and promotes them one level; recovery restores only the deleted page as a root. Duplication copies only the selected page and inserts it after its descendants. These are explicit NoteSpace semantics, not a claim of identical OneNote behavior.
+
+Collapsing a group containing the selected page selects its parent. Search navigation reveals a matching descendant without discarding saved collapse preferences. Collapse state and organization changes are undoable and included in autosave and backups.
+
+Formatting a mixed selection preserves existing per-run attributes. Bold, italic, underline and strike toggles enable the attribute across a mixed selection, then disable it when all selected text has it. Replace All preserves formatting between matches. An empty selection applies formatting to the whole container, not only future typing. The native text-input overlay still displays the base style while editing; rich styles appear on the Skia surface after editing.
 
 ### Keyboard shortcuts
 
@@ -45,6 +53,10 @@ Right-click a notebook, section, or page for its context menu. The **History** t
 | `Ctrl+S` | Save the workspace |
 | `Ctrl+F` | Search notebooks |
 | `Ctrl+Alt+N` | Add a page |
+| `Ctrl+Alt+Shift+N` | Add a subpage of the current page |
+| `F6` | Focus the page list |
+| `Left` / `Right` in the page list | Collapse/expand or navigate to parent/first child |
+| `F2` / `Delete` in the page list | Rename / request deletion with confirmation |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | Bold / italic / underline |
 | `Escape` while editing | Commit and leave the text editor |
@@ -93,7 +105,7 @@ NoteSpace.Core
 | Package | Responsibility |
 | --- | --- |
 | `NoteSpace.Core` | Notebook object model, rich-text marks, ink, geometry, generated JSON metadata, import validation. No Uno or Skia dependency. |
-| `NoteSpace.Editor` | Undoable transactions, organization operations, recovery, search, rich-text range edits, ink geometry and simplification. No UI dependency. |
+| `NoteSpace.Editor` | Undoable transactions, page-outline queries and subtree operations, recovery, search, canonical rich-text range edits, ink geometry and simplification. No UI dependency. |
 | `NoteSpace.Storage` | Persistence contract, atomic file store, conflict exception, content import/export. Browser-specific storage is injected by the app. |
 | `NoteSpace.Rendering.Skia` | Viewport culling, text layout, native resource caches, paper rendering, tables, images, ink, and PNG export. No Uno dependency. |
 | `NoteSpace.Controls` | Reusable Uno note surface, canvas adapter, vector icons, ribbon, navigation, page list, table editor, palettes, search, backstage and status controls. |
@@ -131,6 +143,22 @@ File.WriteAllBytes("page.png", png);
 
 Native Skia consumers must include the appropriate SkiaSharp native-assets package for their runtime. See [architecture and extension points](docs/architecture.md).
 
+### Reuse outline and rich-text operations without Uno
+
+```csharp
+var section = session.Document.Notebooks[0].Sections[0];
+var outline = PageOutline.Build(section.Pages);
+var visible = PageOutline.Visible(outline, session.SelectedPage?.Id);
+session.AddSubpage(section.Pages[0].Id, "Research");
+session.MovePageSibling(session.SelectedPage!.Id, -1);
+
+RichText.Apply(block, start: 2, length: 5, format => format.Bold = true);
+RichText.ReplaceAll(block, "draft", "reviewed");
+var runs = RichText.GetRuns(block); // Detached, non-overlapping style runs.
+```
+
+`PageOutline.Build` interprets legacy orphan indentation without mutating the document. Organization edits normalize affected sections. `RichText` ranges use UTF-16 offsets and reject boundaries that split a surrogate pair. Formatting marks are normalized to ordered, non-overlapping runs rather than accumulating overlays. Use `EditorSession.EditPage` to wrap direct rich-text changes in undoable transactions.
+
 ## Persistence and data safety
 
 The browser uses an IndexedDB database named `notespace-local-v1`. It is **local to the current browser profile and origin**. Clearing site data, using private browsing, losing the profile, or browser storage eviction can remove notes. Browser storage is not a backup or cloud synchronization service.
@@ -143,11 +171,11 @@ Imports validate schema, unique identities, finite geometry, text ranges, enums,
 
 ## Continuous integration and releases
 
-**Build, test and deploy** runs on pull requests, pushes to `main`, and manual dispatch. It runs portable specifications, publishes the browser app, drives Chromium through real note-editing and ink workflows, checks persistence and stale-token rejection, builds the desktop target, packs all reusable libraries, and uploads browser/package/QA artifacts. Only successful main-branch builds deploy to GitHub Pages.
+**Build, test and deploy** runs on pull requests, pushes to `main`, and manual dispatch. It runs portable specifications, publishes the browser app, drives Chromium through real note-editing and ink workflows, checks mixed-style formatting, nested page navigation, collapse persistence and stale-token rejection, builds the desktop target, packs all reusable libraries, and uploads browser/package/QA artifacts. Only successful main-branch builds deploy to GitHub Pages.
 
-**Release** runs on version tags and manual dispatch. It creates versioned library packages and browser output, checks the version input, and attaches artifacts to a GitHub Release for `v*` tags. It does **not** publish packages to NuGet.org or require a commercial service. NuGet publication can be added separately with a deliberately configured publishing identity.
+**Release** runs on version tags and manual dispatch. It runs portable, rendering and browser specifications, creates versioned library packages and browser output with a `SHA256SUMS` manifest, checks the version input, and attaches artifacts to a GitHub Release for `v*` tags. It does **not** publish packages to NuGet.org or require a commercial service. NuGet publication can be added separately with a deliberately configured publishing identity.
 
-QA screenshots and diagnostic logs are available in the `notespace-browser-qa` workflow artifact. Browser tests use headless Chromium software rendering; they are not a substitute for physical pen/GPU testing on every platform.
+QA screenshots, portable/rendering test logs and browser diagnostic logs are available in the `notespace-browser-qa` workflow artifact. Browser tests use headless Chromium software rendering; they are not a substitute for physical pen/GPU testing on every platform.
 
 ## Scope and limitations
 
@@ -155,7 +183,7 @@ This implementation provides working notebook interactions but **does not establ
 
 Not implemented: Microsoft `.one` / `.onepkg` compatibility, OneDrive/Microsoft 365 synchronization, authenticated collaboration, CRDT/merge-based editing, OCR, handwriting recognition, ink-to-math, audio/video recording, transcription, web clipping, Outlook integration, password-protected sections, advanced printing, or complete equation editing.
 
-Text layout is a custom Skia layout engine. Full script shaping, bidirectional layout, font fallback qualification, typography equivalence, and screen-reader semantics for canvas content remain work. The native input overlay displays a base text style while editing; selected-range styling appears in the Skia rendering after editing. Fonts depend on the host and may differ from Microsoft’s desktop fonts. Tables use a separate editor rather than OneNote’s in-place table interaction. Subpages provide indentation, not a complete collapsible page hierarchy.
+Text layout is a custom Skia layout engine. Full script shaping, bidirectional layout, font fallback qualification, typography equivalence, and screen-reader semantics for canvas content remain work. The native input overlay displays a base text style while editing; selected-range styling appears in the Skia rendering after editing. Fonts depend on the host and may differ from Microsoft’s desktop fonts. Tables use a separate editor rather than OneNote’s in-place table interaction. Section groups, drag-and-drop outline reparenting, and complete OneNote organization parity remain work.
 
 Markdown import supports plain paragraphs, headings and simple task prefixes. HTML/Markdown exports flatten free-form placement and do not include ink; use PNG or the native `.notespace` backup when those details matter. Very large-document performance, arbitrary attachments, native desktop file pickers, touch/stylus hardware, and assistive technology require broader qualification. The app cannot promise preservation of unsupported OneNote content.
 
