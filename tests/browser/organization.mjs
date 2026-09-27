@@ -24,6 +24,13 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         await page.keyboard.press('Enter'); await settle();
     };
     const contextCommand = async (id, name) => {
+        // Accessibility activation is per document, not retained across reloads.
+        // Use the public opt-in UI again before resolving a semantic menu item.
+        const enable = page.getByRole('button', { name: 'Enable accessibility', exact: true });
+        if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
+        // F6 is the application's public navigation-focus command; it also reveals
+        // a pane hidden by focus mode or the accessibility activation key routing.
+        await page.keyboard.press('F6'); await settle();
         const groups = allGroups(await saved());
         const group = groups.find(g => g.id === id); assert.ok(group);
         const depth = group.parentId ? 1 : 0;
