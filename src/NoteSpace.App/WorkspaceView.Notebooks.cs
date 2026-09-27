@@ -9,6 +9,9 @@ public sealed partial class WorkspaceView
     private async Task ManageAsync(string command, string? entityId)
     {
         surface.EndEditing();
+        if (surface.HasPendingText) throw new InvalidOperationException("Resolve the current text edit before changing notebook organization.");
+        if (command is "new-section-group" or "rename-group" or "collapse-group" or "expand-group" or "move-group" or "move-section" or "group-up" or "group-down" or "ungroup")
+        { await ManageGroupsAsync(command, entityId); return; }
         var pageId = session.FindPage(entityId)?.Id ?? CurrentPage?.Id;
         var selectedSection = session.FindSection(entityId) ?? CurrentSection;
         switch (command)
@@ -17,10 +20,12 @@ public sealed partial class WorkspaceView
                 var name = await PromptAsync("New notebook", "My notebook");
                 if (name is not null) { var n = session.AddNotebook(name); Navigate(n.Sections[0].Pages[0].Id); } return;
             case "new-section":
-                var owner = session.Document.Notebooks.FirstOrDefault(n => n.Id == entityId) ?? session.Pages.FirstOrDefault(p => p.Page.Id == pageId).Notebook ?? session.Document.Notebooks.FirstOrDefault();
+                var parentGroup = session.FindSectionGroup(entityId);
+                var owner = session.Document.Notebooks.FirstOrDefault(n => n.Id == entityId || n.SectionGroups.Any(g => g.Id == entityId))
+                    ?? session.Pages.FirstOrDefault(p => p.Page.Id == pageId).Notebook ?? session.Document.Notebooks.FirstOrDefault();
                 if (owner is null) { await ManageAsync("new-notebook", null); return; }
                 var sectionName = await PromptAsync("New section", "New section");
-                if (sectionName is not null) Navigate(session.AddSection(owner.Id, sectionName).Pages[0].Id); return;
+                if (sectionName is not null) Navigate(session.AddSectionInGroup(owner.Id, sectionName, parentGroup?.Id).Pages[0].Id); return;
             case "rename-notebook":
                 var notebook = session.Document.Notebooks.FirstOrDefault(n => n.Id == entityId); if (notebook is null) return;
                 var notebookName = await PromptAsync("Rename notebook", notebook.Title);
@@ -35,9 +40,7 @@ public sealed partial class WorkspaceView
                 if (color is not null) session.Execute("Section color", _ => selectedSection.Color = color.Value, true); return;
             case "section-up": case "section-down":
                 if (selectedSection is null) return;
-                var sectionOwner = session.Document.Notebooks.First(n => n.Sections.Contains(selectedSection));
-                var oldIndex = sectionOwner.Sections.IndexOf(selectedSection); var newIndex = Math.Clamp(oldIndex + (command == "section-up" ? -1 : 1), 0, sectionOwner.Sections.Count - 1);
-                session.Execute("Reorder section", _ => { sectionOwner.Sections.Remove(selectedSection); sectionOwner.Sections.Insert(newIndex, selectedSection); }, true); return;
+                session.MoveSectionSibling(selectedSection.Id, command == "section-up" ? -1 : 1); return;
             case "delete-section":
                 if (selectedSection is null || !await ConfirmAsync("Delete section?", $"Move all pages in “{selectedSection.Title}” to the notebook recycle bin?", "Delete")) return;
                 session.Execute("Delete section", w => {
@@ -62,7 +65,7 @@ public sealed partial class WorkspaceView
             case "move-page":
                 if (pageId is null) return;
                 var destinations = session.Document.Notebooks.SelectMany(n => n.Sections.Select(s => (Notebook: n, Section: s))).ToList();
-                var targetIndex = await ChooseAsync("Move page to section", destinations.Select(x => x.Notebook.Title + " / " + x.Section.Title).ToList());
+                var targetIndex = await ChooseAsync("Move page to section", destinations.Select(x => NotebookGroups.Path(x.Notebook, x.Section.GroupId) + " / " + x.Section.Title).ToList());
                 if (targetIndex is not null) { var target = destinations[targetIndex.Value].Section; session.MovePage(pageId, target.Id, target.Pages.Count); Navigate(pageId); } return;
             case "new-subpage":
                 if (pageId is not null) { Navigate(session.AddSubpage(pageId).Id); surface.BeginEditTitle(); } return;

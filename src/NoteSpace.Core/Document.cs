@@ -29,9 +29,11 @@ public sealed class Notebook
     public string Title { get; set; } = "My notebook";
     public uint Color { get; set; } = 0xFF803AB3;
     public List<NoteSection> Sections { get; set; } = [];
+    public List<SectionGroup> SectionGroups { get; set; } = [];
 }
 public sealed class NoteSection
 {
+    public string? GroupId { get; set; }
     public string Id { get; set; } = Ids.New();
     public string Title { get; set; } = "New section";
     public uint Color { get; set; } = 0xFF9262B8;
@@ -189,6 +191,8 @@ public static class DocumentJson
         {
             if (n is null || n.Sections is null || n.Sections.Count > 1000) throw new InvalidDataException("Invalid notebook.");
             Identity(n.Id); Title(n.Title);
+            NotebookGroups.Validate(n);
+            foreach (var group in n.SectionGroups) { Identity(group.Id); Title(group.Title); }
             foreach (var s in n.Sections) { if (s is null || s.Pages is null) throw new InvalidDataException("Invalid section."); Identity(s.Id); Title(s.Title); foreach (var p in s.Pages) Page(p); }
         }
         foreach (var d in w.Trash) { if (d is null || d.SectionId is null) throw new InvalidDataException("Invalid recycle bin."); Page(d.Page); }

@@ -9,11 +9,7 @@ public sealed partial class EditorSession
         var n = new Notebook { Title = CleanTitle(title), Sections = [new NoteSection { Title = "Notes", Pages = [new NotePage()] }] };
         Execute("New notebook", w => { w.Notebooks.Add(n); w.Settings.SelectedPageId = n.Sections[0].Pages[0].Id; }, true); return n;
     }
-    public NoteSection AddSection(string notebookId, string title)
-    {
-        var s = new NoteSection { Title = CleanTitle(title), Pages = [new NotePage()] };
-        Execute("New section", w => { var n = w.Notebooks.First(n => n.Id == notebookId); n.Sections.Add(s); w.Settings.SelectedPageId = s.Pages[0].Id; }, true); return s;
-    }
+    public NoteSection AddSection(string notebookId, string title) => AddSectionInGroup(notebookId, title);
     public NotePage AddPage(string sectionId, string title = "Untitled page")
     {
         var p = new NotePage { Title = CleanTitle(title) };

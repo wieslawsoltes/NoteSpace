@@ -53,7 +53,7 @@ public sealed partial class WorkspaceView
         sectionTabs.Children.Clear();
         foreach (var section in (selected.Notebook ?? session.Document.Notebooks.FirstOrDefault())?.Sections ?? [])
         {
-            var button = new OfficeButton(section.Title, "", () => SelectSection(section.Id), section.Title, theme: theme) { Height = 30, Padding = new Thickness(18, 4, 18, 4), Selected = section.Id == sectionId, BorderBrush = OfficeTheme.Brush(section.Color), BorderThickness = new Thickness(0, 0, 0, 3) }; sectionTabs.Children.Add(button);
+            var button = new OfficeButton(section.Title, "", () => SelectSection(section.Id), NotebookGroups.Path(selected.Notebook ?? session.Document.Notebooks.First(n => n.Sections.Contains(section)), section.GroupId) + " / " + section.Title, theme: theme) { Height = 30, Padding = new Thickness(18, 4, 18, 4), Selected = section.Id == sectionId, BorderBrush = OfficeTheme.Brush(section.Color), BorderThickness = new Thickness(0, 0, 0, 3) }; sectionTabs.Children.Add(button);
         }
         title.Text = CurrentPage?.Title ?? "NoteSpace"; surface.Refresh();
     }
@@ -88,6 +88,9 @@ public sealed partial class WorkspaceView
         var state = new RuntimeState
         {
             Ready = ready, PageTitle = CurrentPage?.Title, PageId = CurrentPage?.Id,
+            SectionGroupCount = session.Document.Notebooks.Sum(n => n.SectionGroups.Count),
+            SectionId = CurrentSection?.Id,
+            SectionGroupId = CurrentSection?.GroupId,
             PageLevel = CurrentPage?.Level ?? 0, PageCollapsed = CurrentPage?.IsCollapsed ?? false, VisiblePageCount = pages.VisiblePageCount,
             PageCount = session.Pages.Count(), BlockCount = CurrentPage?.Blocks.Count ?? 0,
             InkCount = CurrentPage?.Ink.Count ?? 0, Revision = session.Document.Revision,
@@ -104,6 +107,9 @@ internal sealed class RuntimeState
     public bool Ready { get; set; }
     public string? PageTitle { get; set; }
     public string? PageId { get; set; }
+    public int SectionGroupCount { get; set; }
+    public string? SectionId { get; set; }
+    public string? SectionGroupId { get; set; }
     public int PageLevel { get; set; }
     public bool PageCollapsed { get; set; }
     public int VisiblePageCount { get; set; }
