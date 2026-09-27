@@ -133,7 +133,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     private async Task SaveAsync()
     {
         surface.FlushPendingText();
-        if (!ready || saving || saveBlocked || disposed || surface.HasPendingText) return;
+        if (!ready || saving || saveBlocked || disposed || surface.HasPendingText || changes == savedChanges) return;
         saving = true;
         try
         {
@@ -160,13 +160,25 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     }
     private void SelectSection(string id)
     {
+        surface.EndEditing(); if (surface.HasPendingText) return;
         sectionId = id; var section = session.FindSection(id); if (section is null) return;
         var page = section.Pages.FirstOrDefault() ?? session.AddPage(id); Navigate(page.Id);
     }
     private async void Invoke(string command, string? entityId = null)
     {
         if (!ready && command != "about") return;
-        try { await ExecuteCommandAsync(command, entityId); }
+        try
+        {
+            if (command is "undo" or "redo" or "new-page")
+            {
+                surface.EndEditing();
+                if (surface.HasPendingText) throw new InvalidOperationException("Resolve the current draft before changing pages or history.");
+            }
+            if (command == "todo" && surface.SelectedBlock is { Kind: not (BlockKind.Text or BlockKind.Heading or BlockKind.Checklist) })
+                throw new InvalidOperationException("Select a text note to toggle a to-do tag.");
+            if (!await ExecuteTableCommandAsync(command)) await ExecuteCommandAsync(command, entityId);
+            if (command == "search") UpdateSearch();
+        }
         catch (Exception error)
         {
             // A rejected transaction rehydrates Document. Navigation controls must

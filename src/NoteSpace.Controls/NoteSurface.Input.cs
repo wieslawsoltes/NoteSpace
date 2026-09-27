@@ -19,7 +19,18 @@ public sealed partial class NoteSurface
     private int gesture; // 1 ink, 2 eraser, 3 move, 4 resize, 5 pan
     private bool shift, control, space;
     private InkPoint World(Point p, float pressure = 0.5f) => new((float)p.X / Zoom + canvas.Options.OffsetX, (float)p.Y / Zoom + canvas.Options.OffsetY, Math.Clamp(pressure, 0, 1));
-    private NoteBlock? Hit(InkPoint p) => Page?.Blocks.LastOrDefault(b => new NoteRect(b.X, b.Y - 12, b.Width, b.Height + 12).Contains(p.X, p.Y, 3));
+    private readonly List<int> hitCandidates = [];
+    private NoteBlock? Hit(InkPoint p)
+    {
+        if (Page is not { } page) return null;
+        Renderer.ContentIndex(page, session?.Document.Revision).QueryBlocks(new(p.X - 3, p.Y - 3, 6, 6), hitCandidates);
+        for (var i = hitCandidates.Count - 1; i >= 0; i--)
+        {
+            var b = page.Blocks[hitCandidates[i]];
+            if (new NoteRect(b.X, b.Y - 12, b.Width, b.Height + 12).Contains(p.X, p.Y, 3)) return b;
+        }
+        return null;
+    }
     private void ConfigureInput()
     {
         canvas.PointerPressed += PointerDown; canvas.PointerMoved += PointerMove; canvas.PointerReleased += PointerUp;
@@ -27,7 +38,7 @@ public sealed partial class NoteSurface
         canvas.DoubleTapped += (_, e) => {
             if (Tool is not (DrawingTool.Select or DrawingTool.Text) || Page is null) return;
             var p = World(e.GetPosition(canvas));
-            if (p.Y < 95) BeginEditTitle(); else if (Hit(p) is { } block) BeginEdit(block); else if (p.Y >= 120) NewText(p.X, p.Y);
+            if (p.Y < 95) BeginEditTitle(); else if (Hit(p) is { } block) { if (NoteTable.HitTest(block, p.X, p.Y) is { } cell) BeginEditTableCell(block, cell); else BeginEdit(block); } else if (p.Y >= 120) NewText(p.X, p.Y);
             e.Handled = true;
         };
         canvas.PointerWheelChanged += (_, e) => {
@@ -72,6 +83,7 @@ public sealed partial class NoteSurface
         else
         {
             var block = Hit(p); SelectBlock(block?.Id);
+            if (block is not null && NoteTable.HitTest(block, p.X, p.Y) is { } cell) { tableCell = cell; Refresh(); SelectionChanged?.Invoke(this, EventArgs.Empty); }
             if (block is not null)
             {
                 if (block.Kind == BlockKind.Checklist && p.X < block.X + 33 && p.Y >= block.Y + 5 && p.Y <= block.Y + 36)
@@ -117,15 +129,17 @@ public sealed partial class NoteSurface
         }
         else if (gesture == 5)
         {
-            canvas.Options.OffsetX = Math.Max(0, startOffsetX - (float)(current.Position.X - startScreen.X) / Zoom);
-            canvas.Options.OffsetY = Math.Max(0, startOffsetY - (float)(current.Position.Y - startScreen.Y) / Zoom);
+            canvas.Options.OffsetX = Math.Clamp(startOffsetX - (float)(current.Position.X - startScreen.X) / Zoom, 0, 100000);
+            canvas.Options.OffsetY = Math.Clamp(startOffsetY - (float)(current.Position.Y - startScreen.Y) / Zoom, 0, 100000);
         }
         canvas.Invalidate(); e.Handled = true;
     }
     private void EraseAt(InkPoint p)
     {
         if (Page is null) return;
-        foreach (var stroke in Page.Ink) if (!erased.Contains(stroke.Id) && InkGeometry.HitTest(stroke, p, 9 / Zoom)) erased.Add(stroke.Id);
+        var radius = 9 / Zoom;
+        Renderer.ContentIndex(Page, session?.Document.Revision).QueryInk(new(p.X - radius, p.Y - radius, radius * 2, radius * 2), hitCandidates);
+        foreach (var at in hitCandidates) { var stroke = Page.Ink[at]; if (!erased.Contains(stroke.Id) && InkGeometry.HitTest(stroke, p, radius)) erased.Add(stroke.Id); }
     }
     private void PointerUp(object sender, PointerRoutedEventArgs e)
     {

@@ -23,7 +23,15 @@ public sealed partial class NoteSurface : Grid, IDisposable
     public event EventHandler<string>? Error;
     public event EventHandler<CommandRequest>? CommandRequested;
     public string? SelectedBlockId { get; private set; }
-    public NoteBlock? SelectedBlock => Page?.Blocks.FirstOrDefault(b => b.Id == SelectedBlockId);
+    public NoteBlock? SelectedBlock
+    {
+        get
+        {
+            if (Page is not { } page || SelectedBlockId is null) return null;
+            var at = Renderer.ContentIndex(page, session?.Document.Revision).BlockIndex(SelectedBlockId);
+            return at < 0 ? null : page.Blocks[at];
+        }
+    }
     public NotePage? Page => session?.SelectedPage;
     public DrawingTool Tool { get; set; } = DrawingTool.Select;
     public uint PenColor { get; set; } = 0xFF673AB7;
@@ -37,7 +45,8 @@ public sealed partial class NoteSurface : Grid, IDisposable
         get => session;
         set
         {
-            EndEditing(); if (session is not null) session.Changed -= SessionChanged;
+            EndEditing(); if (HasPendingText) throw new InvalidOperationException("Resolve the current draft before replacing the session.");
+            if (session is not null) session.Changed -= SessionChanged;
             session = value; if (session is not null) session.Changed += SessionChanged;
             SelectedBlockId = null; Refresh();
         }
@@ -59,7 +68,8 @@ public sealed partial class NoteSurface : Grid, IDisposable
     public void Refresh()
     {
         if (disposed) return;
-        canvas.Page = Page; canvas.Options.SelectedId = SelectedBlockId; PositionEditor(); canvas.Invalidate();
+        canvas.Page = Page; canvas.Options.ContentRevision = session?.Document.Revision;
+        canvas.Options.SelectedId = SelectedBlockId; canvas.Options.SelectedCell = SelectedTableCell; PositionEditor(); canvas.Invalidate();
     }
     public void NavigateToPage(string pageId, string? blockId = null)
     {
@@ -77,10 +87,10 @@ public sealed partial class NoteSurface : Grid, IDisposable
         if (Math.Abs(value - Zoom) < 0.0001f) return;
         canvas.Options.Zoom = value; Refresh(); ViewChanged?.Invoke(this, EventArgs.Empty);
     }
-    public void FitWidth() { if (Page is not null) { canvas.Options.OffsetX = 0; SetZoom((float)Math.Max(200, ActualWidth - 30) / PageRenderer.Extent(Page).Width); Refresh(); } }
+    public void FitWidth() { if (Page is not null) { canvas.Options.OffsetX = 0; SetZoom((float)Math.Max(200, ActualWidth - 30) / Renderer.ContentIndex(Page, session?.Document.Revision).Extent.Width); Refresh(); } }
     public void SelectBlock(string? id)
     {
-        if (id != SelectedBlockId) EndEditing(); SelectedBlockId = id; Refresh(); SelectionChanged?.Invoke(this, EventArgs.Empty);
+        if (id != SelectedBlockId) { EndEditing(); if (HasPendingText) return; tableCell = default; } SelectedBlockId = id; Refresh(); SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
     public NoteBlock InsertBlock(NoteBlock block, bool edit = false)
     {

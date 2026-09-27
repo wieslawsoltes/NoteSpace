@@ -73,7 +73,7 @@ public sealed partial class WorkspaceView
         topSearch.Visibility = ActualWidth > 0 && ActualWidth < 800 ? Visibility.Collapsed : Visibility.Visible;
         title.Visibility = ActualWidth > 0 && ActualWidth < 1100 ? Visibility.Collapsed : Visibility.Visible;
     }
-    private void UpdateSearch() => search.Bind(session.Search(search.QueryBox.Text), theme);
+    private void UpdateSearch() { if (searchOpen) search.Bind(session.Search(search.QueryBox.Text), theme); }
     private void UpdateStatus()
     {
         var selected = surface.SelectedBlock;
@@ -87,6 +87,9 @@ public sealed partial class WorkspaceView
         if (!ready) return;
         var state = new RuntimeState
         {
+            EditingTableCell = surface.IsEditingTableCell, TableRow = surface.SelectedTableCell?.Row, TableColumn = surface.SelectedTableCell?.Column,
+            HistoryCharacters = session.RetainedHistoryCharacters, SpatialBuilds = surface.Renderer.Statistics.SpatialBuilds,
+            LayoutBuilds = surface.Renderer.Statistics.LayoutBuilds, InkPictureBuilds = surface.Renderer.Statistics.InkPictureBuilds,
             Ready = ready, PageTitle = CurrentPage?.Title, PageId = CurrentPage?.Id,
             SectionGroupCount = session.Document.Notebooks.Sum(n => n.SectionGroups.Count),
             SectionId = CurrentSection?.Id,
@@ -104,6 +107,13 @@ public sealed partial class WorkspaceView
 
 internal sealed class RuntimeState
 {
+    public bool EditingTableCell { get; set; }
+    public int? TableRow { get; set; }
+    public int? TableColumn { get; set; }
+    public long HistoryCharacters { get; set; }
+    public long SpatialBuilds { get; set; }
+    public long LayoutBuilds { get; set; }
+    public long InkPictureBuilds { get; set; }
     public bool Ready { get; set; }
     public string? PageTitle { get; set; }
     public string? PageId { get; set; }

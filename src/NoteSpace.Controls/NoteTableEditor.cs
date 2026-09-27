@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using NoteSpace.Core;
+using NoteSpace.Editor;
 
 namespace NoteSpace.Controls;
 
@@ -26,7 +28,13 @@ public sealed class NoteTableEditor : UserControl
         root.Children.Add(theme.Label("The first row is the header. Changes are applied together when you choose Save.", 11, false, theme.Muted));
         Content = root; Rebuild();
     }
-    public List<List<string>> GetCells() => largeTable is not null ? largeTable.Text.Replace("\r\n", "\n").Split('\n').Select(r => r.Split('\t').ToList()).ToList() : cells.Select(r => r.ToList()).ToList();
+    public List<List<string>> GetCells()
+    {
+        if (largeTable is not null) return NoteTable.ParseTsv(largeTable.Text);
+        var snapshot = cells.Select(r => r.ToList()).ToList();
+        foreach (var box in grid.Children.OfType<TextBox>()) snapshot[Grid.GetRow(box)][Grid.GetColumn(box)] = box.Text;
+        return snapshot;
+    }
     private void Rebuild()
     {
         grid.Children.Clear(); grid.RowDefinitions.Clear(); grid.ColumnDefinitions.Clear();
@@ -38,7 +46,7 @@ public sealed class NoteTableEditor : UserControl
         foreach (var child in tools.Children.OfType<Control>()) child.IsEnabled = !isLarge;
         if (isLarge)
         {
-            largeTable = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap, Text = string.Join("\n", cells.Select(r => string.Join("\t", r))), Width = 740, Height = 380, FontSize = 13, MaxLength = 2 * 1024 * 1024, Header = "Large table — tab-separated cells, one row per line" };
+            largeTable = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap, Text = NoteTable.ToTsv(new NoteBlock { Kind = BlockKind.Table, Cells = cells }), Width = 740, Height = 380, FontSize = 13, MaxLength = 2 * 1024 * 1024, Header = "Large table — tab-separated cells, one row per line" };
             grid.Children.Add(largeTable); return;
         }
         largeTable = null;
@@ -50,7 +58,7 @@ public sealed class NoteTableEditor : UserControl
             {
                 var row = r; var column = c;
                 var box = new TextBox { Text = cells[r][c], MinHeight = 40, FontSize = 13, Padding = new Thickness(8), BorderBrush = OfficeTheme.Brush(theme.Border), BorderThickness = new Thickness(0.5), Background = OfficeTheme.Brush(r == 0 ? theme.Selection : theme.Surface), Foreground = OfficeTheme.Brush(theme.Text), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MaxLength = 100000 };
-                box.TextChanged += (_, _) => cells[row][column] = box.Text;
+                box.TextChanging += (_, _) => cells[row][column] = box.Text;
                 Grid.SetRow(box, r); Grid.SetColumn(box, c); grid.Children.Add(box);
             }
         }

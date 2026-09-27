@@ -15,7 +15,6 @@ public sealed partial class EditorSession
         var p = new NotePage { Title = CleanTitle(title) };
         Execute("New page", w => { (FindSection(sectionId) ?? throw new ArgumentException("Section not found.")).Pages.Add(p); w.Settings.SelectedPageId = p.Id; }, true); return p;
     }
-    public void EditPage(string pageId, string label, Action<NotePage> edit, bool structure = false) => Execute(label, _ => { var p = FindPage(pageId) ?? throw new ArgumentException("Page not found."); edit(p); p.Modified = DateTimeOffset.Now; }, structure);
     public void RenamePage(string pageId, string title) => EditPage(pageId, "Rename page", p => p.Title = CleanTitle(title), true);
     // Deleting a parent preserves its descendants and promotes them one level.
     public void DeletePage(string pageId)

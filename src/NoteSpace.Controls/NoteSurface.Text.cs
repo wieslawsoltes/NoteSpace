@@ -13,7 +13,8 @@ public sealed partial class NoteSurface
     public void ToggleFormat(Func<TextFormat, bool> read, Action<TextFormat, bool> write)
     {
         FlushPendingText();
-        if (SelectedBlock is not { } block) return;
+        if (HasPendingText || SelectedBlock is not { } block) return;
+        if (block.Kind == BlockKind.Table) throw new InvalidOperationException("Table cells use plain text. Select a text note for range formatting.");
         var start = editor is not null && !editingTitle ? editor.SelectionStart : 0;
         var length = editor is not null && !editingTitle ? editor.SelectionLength : 0;
         var enabled = !RichText.AllHave(block, start, length, read);
@@ -22,7 +23,8 @@ public sealed partial class NoteSurface
 
     public void FormatSelection(Action<TextFormat> apply, string? link = null)
     {
-        FlushPendingText(); if (SelectedBlock is not { } block || session is null || Page is null) return;
+        FlushPendingText(); if (HasPendingText || SelectedBlock is not { } block || session is null || Page is null) return;
+        if (block.Kind == BlockKind.Table) throw new InvalidOperationException("Table cells use plain text. Select a text note for range formatting.");
         var start = editor is not null && !editingTitle ? editor.SelectionStart : 0;
         var length = editor is not null && !editingTitle ? editor.SelectionLength : 0;
         session.EditPage(Page.Id, "Format text", p => {
@@ -50,7 +52,7 @@ public sealed partial class NoteSurface
     public void BeginEdit(NoteBlock block)
     {
         if (Page is null) return;
-        if (block.Kind == BlockKind.Table) { CommandRequested?.Invoke(this, new("edit-table", block.Id)); return; }
+        if (block.Kind == BlockKind.Table) { BeginEditTableCell(block, tableCell); return; }
         if (block.Kind is BlockKind.Attachment or BlockKind.Image) { CommandRequested?.Invoke(this, new("save-attachment", block.Id)); return; }
         if (block.Kind == BlockKind.Divider) return;
         if (editingBlockId == block.Id && editor is not null) { editor.Focus(FocusState.Programmatic); return; }
@@ -62,9 +64,10 @@ public sealed partial class NoteSurface
     }
     private void CreateEditor(string text, TextFormat format)
     {
-        var box = new TextBox { Text = text, AcceptsReturn = !editingTitle, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(1), BorderBrush = OfficeTheme.Brush(OfficeTheme.Accent), Background = OfficeTheme.Brush(Dark ? 0xFF252525 : 0xFFFFFFFF), Padding = new Thickness(11, 9, 11, 8), MinWidth = 40, MinHeight = 32, MaxLength = editingTitle ? 500 : 2 * 1024 * 1024, IsSpellCheckEnabled = true };
+        var box = new TextBox { Text = text, AcceptsReturn = !editingTitle, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(1), BorderBrush = OfficeTheme.Brush(OfficeTheme.Accent), Background = OfficeTheme.Brush(Dark ? 0xFF252525 : 0xFFFFFFFF), Padding = new Thickness(11, 9, 11, 8), MinWidth = 40, MinHeight = 32, MaxLength = editingTitle ? 500 : editingCell.HasValue ? NoteTable.MaximumCellLength : 2 * 1024 * 1024, IsSpellCheckEnabled = true };
         editor = box; committedText = text; pendingText = false; ApplyEditorStyle(box, format);
-        AutomationProperties.SetName(box, editingTitle ? "Page title" : "Note text"); AutomationProperties.SetAutomationId(box, editingTitle ? "page-title-editor" : "note-text-editor");
+        AutomationProperties.SetName(box, editingTitle ? "Page title" : editingCell is { } cell ? $"Table row {cell.Row + 1}, column {cell.Column + 1}" : "Note text");
+        AutomationProperties.SetAutomationId(box, editingTitle ? "page-title-editor" : editingCell.HasValue ? "table-cell-editor" : "note-text-editor");
         // TextChanged can be coalesced by the native/Skia text bridge. Track the
         // synchronous change as well, and always reconcile the actual value at commit.
         box.TextChanging += (_, _) => {
@@ -74,7 +77,11 @@ public sealed partial class NoteSurface
             DraftChanged?.Invoke(this, EventArgs.Empty);
         };
         box.TextChanged += (_, _) => { if (editor == box) PositionEditor(); };
-        box.KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape || editingTitle && e.Key == VirtualKey.Enter) { EndEditing(); e.Handled = true; } };
+        box.KeyDown += (_, e) => {
+            if (editingCell.HasValue && (e.Key == VirtualKey.Tab || e.Key == VirtualKey.Enter && !control))
+            { MoveTableCell(shift, e.Key == VirtualKey.Enter); e.Handled = true; }
+            else if (e.Key == VirtualKey.Escape || editingTitle && e.Key == VirtualKey.Enter) { EndEditing(); e.Handled = true; }
+        };
         box.LostFocus += (_, _) => { if (editor == box) FlushPendingText(); };
         void QueueFocus() => DispatcherQueue.TryEnqueue(() => {
             if (editor == box && box.IsLoaded) box.Focus(FocusState.Programmatic);
@@ -99,7 +106,7 @@ public sealed partial class NoteSurface
         typingTimer.Stop();
         if (editor is null || session is null || editingPageId is null) return;
         var box = editor; var pageId = editingPageId; var blockId = editingBlockId;
-        var text = box.Text; var title = editingTitle;
+        var text = box.Text; var title = editingTitle; var cell = editingCell;
         // A notification is a scheduling hint, never proof that input is unchanged.
         // Read the current TextBox value before navigation, export, or removal.
         if (text == committedText) { pendingText = false; return; }
@@ -111,7 +118,8 @@ public sealed partial class NoteSurface
             if (title) session.RenamePage(pageId, text);
             else if (blockId is not null) session.EditPage(pageId, "Edit text", p => {
                 var b = p.Blocks.FirstOrDefault(b => b.Id == blockId) ?? throw new InvalidOperationException("The note being edited no longer exists.");
-                RichText.Replace(b, text); b.Height = Math.Clamp(Renderer.MeasureHeight(b), 40, 20000);
+                if (cell.HasValue) NoteTable.SetCell(b, cell.Value, text);
+                else { RichText.Replace(b, text); b.Height = Math.Clamp(Renderer.MeasureHeight(b), 40, 20000); }
             });
             if (editor == box) committedText = text;
             committed = true;
@@ -130,13 +138,19 @@ public sealed partial class NoteSurface
     {
         typingTimer.Stop(); var old = editor; editor = null;
         if (old is not null) overlay.Children.Remove(old);
-        editingPageId = null; editingBlockId = null; editingTitle = false; pendingText = false; committedText = "";
+        editingPageId = null; editingBlockId = null; editingTitle = false; editingCell = null; pendingText = false; committedText = "";
         canvas.Options.EditingId = null; canvas.Options.EditingTitle = false; canvas.Invalidate();
     }
     private void PositionEditor()
     {
         if (editor is null) return;
         var b = Page?.Blocks.FirstOrDefault(b => b.Id == editingBlockId);
+        if (editingCell is { } cell && b is { Kind: BlockKind.Table })
+        {
+            var bounds = NoteTable.CellBounds(b, cell);
+            Canvas.SetLeft(editor, (bounds.X - canvas.Options.OffsetX) * Zoom); Canvas.SetTop(editor, (bounds.Y - canvas.Options.OffsetY) * Zoom);
+            editor.Width = Math.Max(24, bounds.Width * Zoom); editor.Height = NoteTable.RowHeight * Zoom; editor.FontSize = 14 * Zoom; return;
+        }
         var x = editingTitle ? 38 : b?.X ?? 48; var y = editingTitle ? 23 : b?.Y ?? 140;
         var width = editingTitle ? 672 : b?.Width ?? 560; var size = editingTitle ? 32 : b?.Format.FontSize ?? 16;
         var lines = editingTitle ? 1 : editor.Text.Split('\n').Sum(l => Math.Max(1, (int)Math.Ceiling(l.Length * size * 0.55 / Math.Max(50, width - 24))));
