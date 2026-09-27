@@ -89,7 +89,9 @@ jobs:
           npm install --prefix tests/browser --no-audit --no-fund
           cd tests/browser && npx playwright install --with-deps chromium
       - name: Browser integration tests
-        run: node tests/browser/smoke.mjs
+        run: |
+          node --test tests/browser/host-keyboard.test.mjs
+          node tests/browser/smoke.mjs
       - name: Upload browser QA
         if: always()
         uses: actions/upload-artifact@v4

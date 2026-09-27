@@ -58,6 +58,7 @@ jobs:
         run: |
           npm install --prefix tests/browser --no-audit --no-fund
           (cd tests/browser && npx playwright install --with-deps chromium)
+          node --test tests/browser/host-keyboard.test.mjs
           node tests/browser/smoke.mjs
       - name: Build desktop and package libraries
         run: |

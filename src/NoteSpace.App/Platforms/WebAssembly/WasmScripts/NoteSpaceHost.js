@@ -17,6 +17,30 @@
         });
         accessibilityButtonWired = true;
     };
+    // A dialog can consume Enter on keydown, remove its editor, and restore
+    // focus before keyup. Uno's semantic/native button bridge must not interpret
+    // that unmatched release as activation of the newly focused toolbar button.
+    // Store element identities only; no typed text or keystroke log is retained.
+    const activationOrigins = new Map();
+    const activationKey = key => key === "Enter" || key === " ";
+    globalThis.addEventListener("keydown", event => {
+        if (activationKey(event.key) && !event.repeat) activationOrigins.set(event.key, event.target);
+    }, true);
+    globalThis.addEventListener("keyup", event => {
+        if (!activationKey(event.key)) return;
+        const origin = activationOrigins.get(event.key);
+        activationOrigins.delete(event.key);
+        const target = event.target;
+        const fromEditor = origin?.tagName === "INPUT" || origin?.tagName === "TEXTAREA" || origin?.isContentEditable;
+        const toSemanticButton = target?.id?.startsWith("uno-semantics-")
+            && (target.tagName === "BUTTON" || target.getAttribute?.("role") === "button");
+        if (origin && origin !== target && toSemanticButton
+            && (fromEditor || origin.id === "uno-enable-accessibility")) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    }, true);
+    globalThis.addEventListener("blur", () => activationOrigins.clear());
     const database = () => opening ??= new Promise((resolve, reject) => {
         const request = indexedDB.open(databaseName, 1);
         request.onupgradeneeded = () => request.result.createObjectStore("workspaces");
