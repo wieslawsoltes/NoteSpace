@@ -12,6 +12,7 @@ namespace NoteSpace.Controls;
 
 public sealed partial class NoteSurface
 {
+    private bool switchingCell;
     public void ToggleFormat(Func<TextFormat, bool> read, Action<TextFormat, bool> write)
     {
         FlushPendingText();
@@ -66,34 +67,31 @@ public sealed partial class NoteSurface
     }
     private void CreateEditor(string text, TextFormat format)
     {
-        var box = new TextBox { Text = text, AcceptsReturn = !editingTitle, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(1), BorderBrush = OfficeTheme.Brush(OfficeTheme.Accent), Background = OfficeTheme.Brush(Dark ? 0xFF252525 : 0xFFFFFFFF), Padding = new Thickness(11, 9, 11, 8), MinWidth = 40, MinHeight = 32, MaxLength = editingTitle ? 500 : editingCell.HasValue ? NoteTable.MaximumCellLength : 2 * 1024 * 1024, IsSpellCheckEnabled = true };
+        var box = new NoteInputBox { Text = text, AcceptsReturn = !editingTitle, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(1), BorderBrush = OfficeTheme.Brush(OfficeTheme.Accent), Background = OfficeTheme.Brush(Dark ? 0xFF252525 : 0xFFFFFFFF), Padding = new Thickness(11, 9, 11, 8), MinWidth = 40, MinHeight = 32, MaxLength = editingTitle ? 500 : editingCell.HasValue ? NoteTable.MaximumCellLength : 2 * 1024 * 1024, IsSpellCheckEnabled = true };
         editor = box; committedText = text; pendingText = false; ApplyEditorStyle(box, format);
         AutomationProperties.SetName(box, editingTitle ? "Page title" : editingCell is { } cell ? $"Table row {cell.Row + 1}, column {cell.Column + 1}" : "Note text");
         AutomationProperties.SetAutomationId(box, editingTitle ? "page-title-editor" : editingCell.HasValue ? "table-cell-editor" : "note-text-editor");
         // TextChanged can be coalesced by the native/Skia text bridge. Track the
         // synchronous change as well, and always reconcile the actual value at commit.
         box.TextChanging += (_, _) => {
-            if (editor != box) return;
+            if (editor != box || switchingCell) return;
             pendingText = box.Text != committedText;
             typingTimer.Stop(); if (pendingText) typingTimer.Start();
             DraftChanged?.Invoke(this, EventArgs.Empty);
         };
         box.TextChanged += (_, _) => { if (editor == box) PositionEditor(); };
-        box.KeyDown += (_, e) => {
-            if (editor != box) return;
-            // Key-up may be consumed by the native TextBox or sent to the previous
-            // cell after focus changes. Query modifiers for this input message;
-            // cached bubbling flags can leave Shift or Control stuck.
+        box.HandleKey = e => {
+            if (editor != box) return false;
             var backwards = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
             var controlDown = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
             if (editingCell.HasValue && (e.Key == VirtualKey.Tab || e.Key == VirtualKey.Enter && !controlDown))
             {
-                e.Handled = true;
                 var nextRow = e.Key == VirtualKey.Enter;
-                // Finish native key dispatch before replacing the focused control.
                 DispatcherQueue.TryEnqueue(() => { if (editor == box) MoveTableCell(backwards, nextRow); });
+                return true;
             }
-            else if (e.Key == VirtualKey.Escape || editingTitle && e.Key == VirtualKey.Enter) { e.Handled = true; EndEditing(); }
+            if (e.Key == VirtualKey.Escape || editingTitle && e.Key == VirtualKey.Enter) { EndEditing(); return true; }
+            return false;
         };
         box.LostFocus += (_, _) => { if (editor == box) FlushPendingText(); };
         void QueueFocus() => DispatcherQueue.TryEnqueue(() => {

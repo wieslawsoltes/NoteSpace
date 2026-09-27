@@ -24,7 +24,7 @@ public sealed record OfficeTheme(bool IsDark, uint Surface, uint Panel, uint Tex
     };
 }
 
-public sealed class OfficeButton : Button
+public sealed partial class OfficeButton : Button
 {
     private bool hovered;
     private bool selected;
@@ -56,13 +56,13 @@ public sealed class OfficeButton : Button
 public sealed record CommandRequest(string CommandId, string? EntityId = null);
 public static class OfficeMenus
 {
-    public static MenuFlyout Create(Action<string> action, params (string Id, string Label)[] items)
+    public static MenuFlyout Create(Action<string> action, params (string Id, string Label)[] commands)
     {
         var menu = new MenuFlyout();
-        foreach (var (id, label) in items)
+        foreach (var (id, label) in commands)
         {
             if (id == "-") { menu.Items.Add(new MenuFlyoutSeparator()); continue; }
-            var item = new MenuFlyoutItem { Text = label }; item.Click += (_, _) => action(id); menu.Items.Add(item);
+            var item = new OfficeMenuItem { Text = label }; item.Click += (_, _) => action(id); menu.Items.Add(item);
         }
         return menu;
     }

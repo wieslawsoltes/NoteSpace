@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using NoteSpace.Core;
 using NoteSpace.Editor;
 
@@ -20,10 +21,26 @@ public sealed partial class NoteSurface
         // Reconcile IDs after flushing a draft, which can replace the page DTO.
         table = Page.Blocks.FirstOrDefault(b => b.Id == table.Id) ?? throw new InvalidOperationException("The table no longer exists.");
         if (table.Cells.Count == 0) { CommandRequested?.Invoke(this, new("edit-table", table.Id)); return; }
+        ActivateTableCell(table, cell);
+    }
+    private void ActivateTableCell(NoteBlock table, TableCellAddress cell)
+    {
         cell = ClampCell(table, cell);
         SelectedBlockId = table.Id; tableCell = cell; editingCell = cell;
         editingPageId = Page.Id; editingBlockId = table.Id; editingTitle = false;
-        CreateEditor(NoteTable.GetCell(table, cell), new TextFormat { FontSize = 14, Bold = cell.Row == 0 });
+        var text = NoteTable.GetCell(table, cell);
+        var format = new TextFormat { FontSize = 14, Bold = cell.Row == 0 };
+        if (editor is { } box)
+        {
+            // Native input is shared by the browser. Reuse its control rather than
+            // detaching it during key dispatch and losing the new cell's focus.
+            switchingCell = true;
+            try { committedText = text; pendingText = false; box.Text = text; ApplyEditorStyle(box, format); box.Select(text.Length, 0); }
+            finally { switchingCell = false; }
+            AutomationProperties.SetName(box, $"Table row {cell.Row + 1}, column {cell.Column + 1}");
+            box.Focus(FocusState.Programmatic);
+        }
+        else CreateEditor(text, format);
         // Keep the table visible beneath the single native cell editor.
         canvas.Options.EditingId = null;
         RevealTableCell(table, cell); Refresh(); SelectionChanged?.Invoke(this, EventArgs.Empty);
@@ -41,18 +58,18 @@ public sealed partial class NoteSurface
     {
         var cell = editingCell; var id = editingBlockId;
         if (cell is null || id is null || session is null) return;
-        EndEditing(); if (HasPendingText || SelectedBlock is not { Kind: BlockKind.Table } table) return;
+        FlushPendingText(); if (HasPendingText || SelectedBlock is not { Kind: BlockKind.Table } table) return;
         var columns = NoteTable.ColumnCount(table);
         var next = nextRow ? new TableCellAddress(cell.Value.Row + (backwards ? -1 : 1), cell.Value.Column)
             : new TableCellAddress((cell.Value.Row * columns + cell.Value.Column + (backwards ? -1 : 1)) / columns,
                 (cell.Value.Row * columns + cell.Value.Column + (backwards ? -1 : 1)) % columns);
-        if (next.Row < 0 || next.Column < 0) { BeginEditTableCell(table, new(0, 0)); return; }
+        if (next.Row < 0 || next.Column < 0) { ActivateTableCell(table, new(0, 0)); return; }
         if (next.Row >= table.Cells.Count)
         {
             try { session.EditPage(Page!.Id, "Append table row", p => NoteTable.InsertRow(p.Blocks.First(b => b.Id == id), table.Cells.Count)); }
-            catch (Exception error) { Error?.Invoke(this, error.Message); BeginEditTableCell(SelectedBlock!, cell.Value); return; }
+            catch (Exception error) { Error?.Invoke(this, error.Message); ActivateTableCell(SelectedBlock!, cell.Value); return; }
         }
-        BeginEditTableCell(SelectedBlock!, next);
+        ActivateTableCell(SelectedBlock!, next);
     }
     public void EditSelectedTableCell()
     {

@@ -30,17 +30,30 @@ public static class LiteralTextSearch
         ArgumentNullException.ThrowIfNull(text); ArgumentException.ThrowIfNullOrEmpty(query);
         return Enumerate(text, query, matchCase, wholeWord);
     }
+    /// <summary>Find the first match without allocating an iterator for each scanned cell.</summary>
+    public static bool TryFind(string text, string query, out TextMatch match, bool matchCase = false, bool wholeWord = false)
+    {
+        ArgumentNullException.ThrowIfNull(text); ArgumentException.ThrowIfNullOrEmpty(query);
+        return TryFindCore(text, query, 0, matchCase, wholeWord, out match);
+    }
     private static IEnumerable<TextMatch> Enumerate(string text, string query, bool matchCase, bool wholeWord)
     {
+        var offset = 0;
+        while (TryFindCore(text, query, offset, matchCase, wholeWord, out var match))
+        { yield return match; offset = match.Start + match.Length; }
+    }
+    private static bool TryFindCore(string text, string query, int offset, bool matchCase, bool wholeWord, out TextMatch match)
+    {
         var comparison = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        for (var offset = 0; offset <= text.Length - query.Length;)
+        for (; offset <= text.Length - query.Length;)
         {
-            var at = text.IndexOf(query, offset, comparison); if (at < 0) yield break;
+            var at = text.IndexOf(query, offset, comparison); if (at < 0) break;
             var end = at + query.Length;
             if (!SplitsPair(text, at) && !SplitsPair(text, end) && (!wholeWord || (!WordBefore(text, at) && !WordAt(text, end))))
-            { yield return new(at, query.Length); offset = end; }
+            { match = new(at, query.Length); return true; }
             else offset = at + 1;
         }
+        match = new(-1, 0); return false;
     }
     private static bool SplitsPair(string text, int at) => at > 0 && at < text.Length && char.IsHighSurrogate(text[at - 1]) && char.IsLowSurrogate(text[at]);
     private static bool WordBefore(string text, int at) => at > 0 && WordAt(text, at - (SplitsPair(text, at - 1) ? 2 : 1));
@@ -102,8 +115,8 @@ public sealed partial class EditorSession
         var count = 0;
         bool Match(string text, out TextMatch match)
         {
-            match = query.Text.Length == 0 ? new(0, 0) : LiteralTextSearch.Find(text, query.Text, query.MatchCase, query.WholeWord).FirstOrDefault(new TextMatch(-1, 0));
-            return match.Start >= 0;
+            if (query.Text.Length == 0) { match = new(0, 0); return true; }
+            return LiteralTextSearch.TryFind(text, query.Text, out match, query.MatchCase, query.WholeWord);
         }
         foreach (var (notebook, section, page) in SearchPages(query))
         {
