@@ -96,13 +96,15 @@ export async function searchWorkflows({ browser, output }) {
         assert.deepEqual(findPage(await saved(), 'Welcome to NoteSpace'), findPage(before, 'Welcome to NoteSpace'));
         completed.push('scoped replace is one undo action');
         // The notice cannot accidentally undo a different transaction after history
-        // has moved. Exercise its real pointer action, not a private callback.
+        // has moved. Exercise real semantic keyboard input, not a private callback.
         const stableRevision = (await saved()).revision;
         await page.locator('[xamlautomationid="operation-undo"]').focus(); await page.keyboard.press('Space'); await settle();
         assert.equal((await saved()).revision, stableRevision, 'Stale operation undo does not modify history');
+        await page.locator('[xamlautomationid="operation-undo"]').waitFor({ state: 'hidden' });
+        assert.ok((await page.locator('[xamlautomationid="operation-notice"]').getAttribute('aria-label')).includes('The document has changed'));
         completed.push('stale operation undo is guarded');
         await page.locator('[xamlautomationid="operation-dismiss"]').focus(); await page.keyboard.press('Space'); await settle();
-        await page.waitForFunction(() => !document.querySelector('[xamlautomationid="operation-notice"]'));
+        await page.locator('[xamlautomationid="operation-notice"]').waitFor({ state: 'hidden' });
         completed.push('operation result dismiss');
         await page.screenshot({ path: resolve(output, 'scoped-search.png') });
         assert.deepEqual(errors, []);
