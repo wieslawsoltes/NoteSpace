@@ -9,8 +9,22 @@ namespace NoteSpace.App;
 public sealed partial class WorkspaceView
 {
     private readonly DispatcherTimer searchTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
+    private readonly OperationNotice operationNotice = new();
+    private long noticeRevision = -1;
     private void ConfigureSearch()
     {
+        root.Children.Remove(sectionStrip);
+        var strips = new StackPanel(); strips.Children.Add(sectionStrip); strips.Children.Add(operationNotice);
+        Grid.SetRow(strips, 2); root.Children.Insert(2, strips);
+        operationNotice.UndoRequested += (_, _) => {
+            if (session.Document.Revision != noticeRevision || !session.CanUndo || surface.HasPendingText)
+            {
+                operationNotice.Show("The document has changed. Use the regular Undo command to review newer edits first.", false, theme);
+                return;
+            }
+            operationNotice.Dismiss(); Invoke("undo");
+        };
+        operationNotice.Dismissed += (_, _) => pages.FocusSelectedPage();
         searchTimer.Tick += (_, _) => { searchTimer.Stop(); UpdateSearch(); };
         search.Options.Changed += (_, _) => ScheduleSearch();
     }
@@ -52,6 +66,10 @@ public sealed partial class WorkspaceView
         if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary || find.Text.Length == 0) return;
         var result = session.ReplaceAll(Query(find.Text, options), replacement.Text, reflow: block => block.Height = Math.Clamp(surface.Renderer.MeasureHeight(block), 40, 20000));
         UpdateSearch();
-        await MessageAsync("Replace complete", $"{result.Matches} matches; updated {result.ChangedContainers} text containers or table cells on {result.ChangedPages} pages.");
+        noticeRevision = session.Document.Revision;
+        operationNotice.Show($"Replace complete: {result.Matches} matches; updated {result.ChangedContainers} text containers or table cells on {result.ChangedPages} pages.", result.ChangedContainers > 0, theme);
+        // Restore a non-text focus target after modal input roots are re-enabled,
+        // so Ctrl+Z addresses document history rather than a detached dialog editor.
+        DispatcherQueue.TryEnqueue(() => pages.FocusSelectedPage());
     }
 }

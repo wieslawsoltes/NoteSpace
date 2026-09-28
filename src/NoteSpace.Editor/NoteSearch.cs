@@ -88,16 +88,6 @@ public sealed partial class EditorSession
         if (query.Scope != NoteSearchScope.AllNotebooks && string.IsNullOrEmpty(query.ScopeId))
             throw new ArgumentException("A scoped search requires a document ID.", nameof(query));
     }
-    private IEnumerable<(Notebook Notebook, NoteSection Section, NotePage Page)> SearchPages(NoteSearchQuery query)
-    {
-        return Pages.Where(x => query.Scope switch {
-            NoteSearchScope.AllNotebooks => true,
-            NoteSearchScope.Notebook => x.Notebook.Id == query.ScopeId,
-            NoteSearchScope.Section => x.Section.Id == query.ScopeId,
-            NoteSearchScope.Page => x.Page.Id == query.ScopeId,
-            _ => false
-        });
-    }
     private static bool MatchesFilter(NoteBlock block, NoteSearchFilter filter) => filter switch {
         NoteSearchFilter.OpenToDos => block.Kind == BlockKind.Checklist && !block.Checked,
         NoteSearchFilter.CompletedToDos => block.Kind == BlockKind.Checklist && block.Checked,
@@ -112,6 +102,7 @@ public sealed partial class EditorSession
     }
     private IEnumerable<SearchHit> SearchCore(NoteSearchQuery query, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (query.Text.Length == 0 && query.Filter is NoteSearchFilter.AllContent or NoteSearchFilter.TagsOnly) yield break;
         var count = 0;
         bool Match(string text, out TextMatch match)

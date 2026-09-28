@@ -81,15 +81,29 @@ export async function searchWorkflows({ browser, output }) {
         await page.keyboard.press('Control+a'); await page.keyboard.type('plan');
         await page.keyboard.press('Tab'); await page.keyboard.type('roadmap');
         await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Enter'); await settle();
-        // The completion dialog is dismissible without relying on its popup peer's local bounds.
-        await page.keyboard.press('Escape'); await wait(() => !globalThis.noteSpaceState.dirty); await settle();
+        await page.locator('[xamlautomationid="operation-notice"]').waitFor({ state: 'attached', timeout: 10000 });
+        await wait(() => !globalThis.noteSpaceState.dirty); await settle();
+        assert.equal(await page.getByRole('button', { name: 'Close', exact: true }).count(), 0, 'Replacement has no blocking completion dialog');
+        completed.push('non-modal replacement result');
         const after = await saved();
         assert.ok(findPage(after, 'Welcome to NoteSpace').blocks.some(b => b.text.includes('Make a roadmap.')));
         assert.deepEqual(findPage(after, 'Weekly planning'), findPage(before, 'Weekly planning'));
         completed.push('scoped whole-word replace through the dialog');
-        await page.keyboard.press('Control+z'); await wait(() => !globalThis.noteSpaceState.dirty); await settle();
+        const revision = after.revision;
+        await page.keyboard.press('Control+z');
+        await page.waitForFunction(r => globalThis.noteSpaceState.revision > r && !globalThis.noteSpaceState.dirty, revision);
+        await settle();
         assert.deepEqual(findPage(await saved(), 'Welcome to NoteSpace'), findPage(before, 'Welcome to NoteSpace'));
         completed.push('scoped replace is one undo action');
+        // The notice cannot accidentally undo a different transaction after history
+        // has moved. Exercise its real pointer action, not a private callback.
+        const stableRevision = (await saved()).revision;
+        await page.locator('[xamlautomationid="operation-undo"]').focus(); await page.keyboard.press('Space'); await settle();
+        assert.equal((await saved()).revision, stableRevision, 'Stale operation undo does not modify history');
+        completed.push('stale operation undo is guarded');
+        await page.locator('[xamlautomationid="operation-dismiss"]').focus(); await page.keyboard.press('Space'); await settle();
+        await page.waitForFunction(() => !document.querySelector('[xamlautomationid="operation-notice"]'));
+        completed.push('operation result dismiss');
         await page.screenshot({ path: resolve(output, 'scoped-search.png') });
         assert.deepEqual(errors, []);
         await writeFile(resolve(output, 'search-result.json'), JSON.stringify({ passed: true, tests: completed }, null, 2));
