@@ -106,22 +106,6 @@ public sealed partial class WorkspaceView
         var chosen = await ChooseAsync("Tagged notes and to-do items", matches.Select(x => $"{x.Page.Title} · {(x.Block.Kind == BlockKind.Checklist ? x.Block.Checked ? "☑ " : "☐ " : "★ ")}{x.Block.Text[..Math.Min(70, x.Block.Text.Length)]}").ToList());
         if (chosen is not null) Navigate(matches[chosen.Value].Page.Id, matches[chosen.Value].Block.Id);
     }
-    private async Task ReplaceTextAsync()
-    {
-        surface.EndEditing(); var find = await PromptAsync("Find text in all notebooks", ""); if (string.IsNullOrEmpty(find)) return;
-        var replace = await PromptAsync("Replace with", ""); if (replace is null) return;
-        if (!await ConfirmAsync("Replace in all notebooks?", $"Replace every case-insensitive occurrence of “{find}” in note text and table cells? Page titles are unchanged. This is one undoable action.", "Replace all")) return;
-        var count = 0;
-        session.Execute("Replace all", _ => {
-            foreach (var (_, _, page) in session.Pages) foreach (var b in page.Blocks)
-            {
-                var replaced = RichText.ReplaceAll(b, find, replace);
-                if (replaced > 0) { b.Height = Math.Max(b.Height, surface.Renderer.MeasureHeight(b)); page.Modified = DateTimeOffset.Now; count++; }
-                foreach (var row in b.Cells) for (var i = 0; i < row.Count; i++) { var value = row[i].Replace(find, replace, StringComparison.OrdinalIgnoreCase); if (value != row[i]) { row[i] = value; page.Modified = DateTimeOffset.Now; count++; } }
-            }
-        });
-        await MessageAsync("Replace complete", $"Updated {count} text containers or table cells.");
-    }
     private async Task TemplateAsync()
     {
         var selected = await ChooseAsync("Create a page from a template", ["Blank page", "Meeting notes", "Project checklist", "Ideas and sketches"]);

@@ -10,10 +10,13 @@ public sealed class SearchResultsControl : UserControl
     private readonly Grid root = new();
     private readonly StackPanel results = new() { Spacing = 6, Margin = new Thickness(12) };
     public TextBox QueryBox { get; } = new() { PlaceholderText = "Search all notebooks", Margin = new Thickness(12), FontSize = 14 };
+    public SearchOptionsControl Options { get; } = new();
     public event EventHandler<SearchHit>? ResultSelected;
     public SearchResultsControl()
     {
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); root.RowDefinitions.Add(new RowDefinition()); root.Children.Add(QueryBox);
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); root.RowDefinitions.Add(new RowDefinition()); var header = new StackPanel(); header.Children.Add(QueryBox);
+        Options.Margin = new Thickness(12, 0, 12, 8); header.Children.Add(Options); root.Children.Add(header);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(QueryBox, "notebook-search");
         var scroll = new ScrollViewer { Content = results }; Grid.SetRow(scroll, 1); root.Children.Add(scroll); Content = root;
     }
     public void Bind(IEnumerable<SearchHit> hits, OfficeTheme theme)
@@ -23,8 +26,11 @@ public sealed class SearchResultsControl : UserControl
         foreach (var hit in all.Take(200))
         {
             var content = new StackPanel { Spacing = 5 }; content.Children.Add(theme.Label(hit.PageTitle, 14, true));
+            if (hit.Location.Length > 0) content.Children.Add(theme.Label(hit.Location, 10, false, theme.Muted));
             content.Children.Add(new TextBlock { Text = hit.Snippet, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = OfficeTheme.Brush(theme.Muted), MaxLines = 3 });
             var button = new OfficeButton { Theme = theme, Content = content, HorizontalContentAlignment = HorizontalAlignment.Stretch, HorizontalAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(10) };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(button, "search-result-" + hit.PageId + "-" + (hit.BlockId ?? "title"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, hit.PageTitle + ": " + hit.Snippet);
             button.Click += (_, _) => ResultSelected?.Invoke(this, hit); results.Children.Add(button);
         }
     }

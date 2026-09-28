@@ -71,14 +71,16 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         status.ZoomRequested += (_, value) => surface.SetZoom(value);
         status.FocusRequested += (_, _) => Invoke("full-page");
         backstage.CommandInvoked += (_, command) => Invoke(command);
-        search.QueryBox.TextChanged += (_, _) => UpdateSearch();
-        search.ResultSelected += (_, hit) => Navigate(hit.PageId, hit.BlockId);
-        topSearch.TextChanged += (_, _) => { searchOpen = topSearch.Text.Length > 0; search.QueryBox.Text = topSearch.Text; ApplyLayout(); UpdateSearch(); };
+        ConfigureSearch();
+        search.QueryBox.TextChanged += (_, _) => ScheduleSearch();
+        search.ResultSelected += (_, hit) => NavigateSearchResult(hit);
+        topSearch.TextChanged += (_, _) => { searchOpen = topSearch.Text.Length > 0; search.QueryBox.Text = topSearch.Text; ApplyLayout(); ScheduleSearch(); };
         saveTimer.Tick += async (_, _) => { saveTimer.Stop(); await SaveAsync(); };
         AddShortcut(VirtualKey.G, VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu, "new-section-group");
         AddShortcut(VirtualKey.F6, VirtualKeyModifiers.None, "focus-pages");
         AddShortcut(VirtualKey.S, VirtualKeyModifiers.Control, "save");
         AddShortcut(VirtualKey.F, VirtualKeyModifiers.Control, "search");
+        AddShortcut(VirtualKey.H, VirtualKeyModifiers.Control, "replace");
         AddShortcut(VirtualKey.Z, VirtualKeyModifiers.Control, "undo");
         AddShortcut(VirtualKey.Y, VirtualKeyModifiers.Control, "redo");
         AddShortcut(VirtualKey.B, VirtualKeyModifiers.Control, "bold");
@@ -122,7 +124,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     {
         MarkDirty();
         if (change.StructureChanged) BindNavigation();
-        UpdateStatus(); UpdateSearch(); Report();
+        UpdateStatus(); ScheduleSearch(); Report();
     }
     private void MarkDirty()
     {
@@ -133,12 +135,15 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     private async Task SaveAsync()
     {
         surface.FlushPendingText();
-        if (!ready || saving || saveBlocked || disposed || surface.HasPendingText) return;
+        if (!ready || saving || saveBlocked || disposed || surface.HasPendingText || changes == savedChanges) return;
         saving = true;
         try
         {
-            var version = changes; var snapshot = DocumentJson.Clone(session.Document);
-            storageToken = await platform.Store.SaveAsync(snapshot, storageToken);
+            var version = changes;
+            if (platform.Store is IWorkspaceSnapshotStore snapshots)
+                storageToken = await snapshots.SaveSnapshotAsync(WorkspaceSnapshot.Capture(session.Document), storageToken);
+            else // Preserve compatibility with third-party mutable-document stores.
+                storageToken = await platform.Store.SaveAsync(DocumentJson.Clone(session.Document), storageToken);
             savedChanges = version; saveStatus = changes == version ? "Saved on this device" : "Saving…";
             if (changes != version) saveTimer.Start();
         }
@@ -160,13 +165,25 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     }
     private void SelectSection(string id)
     {
+        surface.EndEditing(); if (surface.HasPendingText) return;
         sectionId = id; var section = session.FindSection(id); if (section is null) return;
         var page = section.Pages.FirstOrDefault() ?? session.AddPage(id); Navigate(page.Id);
     }
     private async void Invoke(string command, string? entityId = null)
     {
-        if (!ready && command != "about") return;
-        try { await ExecuteCommandAsync(command, entityId); }
+        if ((!ready && command != "about") || dialogGate.CurrentCount == 0) return;
+        try
+        {
+            if (command is "undo" or "redo" or "new-page")
+            {
+                surface.EndEditing();
+                if (surface.HasPendingText) throw new InvalidOperationException("Resolve the current draft before changing pages or history.");
+            }
+            if (command == "todo" && surface.SelectedBlock is { Kind: not (BlockKind.Text or BlockKind.Heading or BlockKind.Checklist) })
+                throw new InvalidOperationException("Select a text note to toggle a to-do tag.");
+            if (!await ExecuteTableCommandAsync(command)) await ExecuteCommandAsync(command, entityId);
+            if (command == "search") UpdateSearch();
+        }
         catch (Exception error)
         {
             // A rejected transaction rehydrates Document. Navigation controls must
@@ -178,6 +195,6 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     }
     public void Dispose()
     {
-        if (disposed) return; disposed = true; saveTimer.Stop(); session.Changed -= OnDocumentChanged; surface.Dispose();
+        if (disposed) return; disposed = true; saveTimer.Stop(); searchTimer.Stop(); session.Changed -= OnDocumentChanged; surface.Dispose();
     }
 }

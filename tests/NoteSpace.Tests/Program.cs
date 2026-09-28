@@ -49,6 +49,10 @@ Test("A rejected edit does not discard redo history", () => {
     Assert(s.CanRedo); s.Redo(); Assert(s.SelectedPage!.Title == "Retained redo");
 });
 EditingRegressionTests.Run(Test);
+PerformanceAndTableTests.Run(Test);
 OrganizationTests.Run(Test);
+SearchTests.Run(Test);
+SearchScopeTests.Run(Test);
+SnapshotTests.Run(Test);
 Console.WriteLine($"\n{passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;

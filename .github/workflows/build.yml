@@ -45,6 +45,23 @@ jobs:
           mkdir -p artifacts/qa
           dotnet run --project tests/NoteSpace.Tests -c Release 2>&1 | tee artifacts/qa/portable-tests.log
           dotnet run --project tests/NoteSpace.Rendering.Tests -c Release 2>&1 | tee artifacts/qa/rendering-tests.log
+      - name: Measure current CPU performance
+        shell: bash
+        run: dotnet run --project tests/NoteSpace.Benchmarks -c Release -- artifacts/qa/bench-current.json "$GITHUB_SHA"
+      - name: Check out performance baseline
+        uses: actions/checkout@v4
+        with:
+          ref: b75a27778e0e1209e28e6a01ad30b4b0119a79c2
+          path: artifacts/benchmark-baseline
+          persist-credentials: false
+      - name: Compare the same benchmark runner against the baseline
+        shell: bash
+        run: |
+          mkdir -p artifacts/benchmark-baseline/tests/NoteSpace.Benchmarks
+          cp tests/NoteSpace.Benchmarks/*.cs tests/NoteSpace.Benchmarks/*.csproj artifacts/benchmark-baseline/tests/NoteSpace.Benchmarks/
+          dotnet run --project artifacts/benchmark-baseline/tests/NoteSpace.Benchmarks -c Release -- "$PWD/artifacts/qa/bench-baseline.json" b75a277
+          python3 tests/NoteSpace.Benchmarks/compare.py artifacts/qa/bench-baseline.json artifacts/qa/bench-current.json artifacts/qa/performance.md
+          cat artifacts/qa/performance.md >> "$GITHUB_STEP_SUMMARY"
       - name: Install WebAssembly workload
         run: dotnet workload install wasm-tools
       - name: Publish browser application
@@ -72,7 +89,9 @@ jobs:
           npm install --prefix tests/browser --no-audit --no-fund
           cd tests/browser && npx playwright install --with-deps chromium
       - name: Browser integration tests
-        run: node tests/browser/smoke.mjs
+        run: |
+          node --test tests/browser/host-keyboard.test.mjs
+          node tests/browser/smoke.mjs
       - name: Upload browser QA
         if: always()
         uses: actions/upload-artifact@v4

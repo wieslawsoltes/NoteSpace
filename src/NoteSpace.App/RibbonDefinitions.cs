@@ -43,6 +43,12 @@ internal static class RibbonDefinitions
             new("Zoom", [C("zoom-out", "Zoom Out", "−"), C("zoom-in", "Zoom In", "+"), C("zoom-reset", "100%", "text"), C("fit-width", "Page Width", "fullscreen")]),
             new("Window", [C("collapse-ribbon", "Ribbon", "chevron"), C("navigation", "Navigation", "menu")])
         ]),
+        new("Table", [
+            new("Cells", [C("table-edit-cell", "Edit Cell", "text"), C("table-clear-cell", "Clear Cell", "eraser"), C("table-edit-all", "Whole Table", "table")]),
+            new("Rows", [C("table-row-above", "Insert Above", "add", true), C("table-row-below", "Insert Below", "add", true), C("table-delete-row", "Delete Row", "trash", true)]),
+            new("Columns", [C("table-column-left", "Insert Left", "add", true), C("table-column-right", "Insert Right", "add", true), C("table-delete-column", "Delete Column", "trash", true)]),
+            new("Data", [C("table-copy", "Copy Table", "copy"), C("table-paste", "Paste Cells", "clipboard"), C("table-transpose", "Transpose", "table")])
+        ]),
         new("Help", [new("NoteSpace", [C("shortcuts", "Get Started", "book"), C("about", "About", "?"), C("export", "Back Up", "download")])])
     ];
 }

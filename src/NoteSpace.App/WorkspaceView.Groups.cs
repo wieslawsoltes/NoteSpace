@@ -15,7 +15,12 @@ public sealed partial class WorkspaceView
             case "new-section-group":
                 if (notebook is null) throw new InvalidOperationException("Create a notebook first.");
                 var name = await PromptAsync("New section group", "New section group");
-                if (name is not null) session.AddSectionGroup(notebook.Id, name, group?.Id);
+                if (name is not null)
+                {
+                    var added = session.AddSectionGroup(notebook.Id, name, group?.Id);
+                    navigationOpen = true; focusMode = false; ApplyLayout();
+                    notebooks.RevealGroup(notebook.Id, added.Id);
+                }
                 break;
             case "rename-group":
                 if (group is null) return;

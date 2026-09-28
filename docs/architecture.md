@@ -8,7 +8,7 @@ All five libraries are independently packable. A headless consumer can reference
 
 ## Editing transactions
 
-`EditorSession.Execute` owns document mutation. A transaction snapshots the pre-edit state, validates the resulting document, records a bounded undo entry, clears redo, and raises one change notification. Container drag, resize, and ink gestures use temporary render state until pointer release; canceled gestures do not enter history. Text input commits in debounced batches and is flushed before navigation/export.
+`EditorSession.Execute` owns document mutation. Generic transactions snapshot the workspace. `EditPage` edits a detached page draft, validates the complete resulting workspace and serialized size, and retains only before/after page JSON. Both paths share bounded chronological undo/redo, rollback, monotonically increasing revisions and change notifications. A no-op page edit does not create a revision. Container drag, resize, and ink gestures use temporary render state until pointer release; canceled gestures do not enter history. Text input commits in debounced batches and is flushed before navigation/export.
 
 Models are mutable DTOs for efficient source-generated serialization. Consumers must not mutate documents concurrently. The session is a single-writer abstraction intended to be owned by a UI dispatcher or another explicitly serialized command loop. This is not a thread-safe collaborative document engine.
 
@@ -48,3 +48,34 @@ A new ribbon command needs an actual handler and executable verification. Do not
 `NotebookGroups` provides a notebook-local section-group graph and navigation projection. Sections remain in `Notebook.Sections`; `NoteSection.GroupId` and `SectionGroup.ParentId` hold organization. This keeps existing page enumeration, search and recovery independent of group visibility. IDs are globally validated by `DocumentJson`, references must belong to the same notebook, cycles are rejected, and group depth is bounded to eight. See [organization contracts](organization.md).
 
 `EditorSession.CanMovePageRelative` validates a read-only drop preview; `MovePageRelative` revalidates and commits the entire page subtree in one transaction. `PageListControl` owns pointer capture, thresholds, indicators and cancellation, delegating validation/commit to its host. It never edits the model during pointer movement. Context menus remain the keyboard alternative to drag operations.
+
+## Retained rendering and lookup contracts
+
+`PageContentIndex` is a UI-independent snapshot of block/ink bounds, IDs and extent. Its bounding-volume trees produce ordered candidate indices into caller-owned buffers. Rebuild it after geometry/content changes; it does not observe arbitrary DTO mutation. Pointer hit testing and erasing use the same broad phase as rendering, followed by exact tests.
+
+`RenderOptions.ContentRevision` is optional. With a stable revision and page reference, the renderer reuses its spatial snapshot and bounded completed-ink `SKPicture` recordings. Omitting it rebuilds spatial data so existing mutable consumers are not silently given stale geometry. Text stamps snapshot formatting and compare immutable string references; transient resize previews bypass the revision fast path. Text lines and table cells are culled against the document-space viewport. Native fonts and pictures are disposed on eviction, cache clearing and renderer disposal.
+
+`EditorSession.FindPage` and `FindSection` use indexes outside transactions and live enumeration inside generic transactions. All transaction/history changes invalidate these projections. Hosts deliberately mutating DTO collections outside transactions must call `InvalidateIndexes`; those mutations do not gain undo or autosave notifications.
+
+**Page editing compatibility:** successful `EditPage` calls replace the edited page DTO. Retain IDs and resolve the current page/block after a transaction, not long-lived mutable references. The callback must mutate only its supplied detached draft; use `Execute` for cross-page or organizational edits. Complete validation and streaming JSON size checks remain O(workspace size), and a page draft still copies its attachments. This is not a block-delta or constant-time persistence engine.
+
+## Table editing contracts
+
+`NoteTable` provides geometry, safe rectangular operations and quoted TSV parsing without Uno or Skia. Wrap it in `EditorSession.EditPage` for undo and global validation. `NoteSurface` positions one native plain-text editor over the chosen Skia table cell and commits it through the shared draft pipeline. Keyboard traversal and structural commands resolve the current table by ID after each commit. Clipboard reads capture page/block/cell identity and reject a changed target after awaiting the browser. No rich-cell model, merged cells or variable column/row layout is implied.
+
+
+## Search and replacement contracts
+
+`NoteSearchQuery` carries stable scope IDs, ordinal case/word options, result limits and content filters. Queries enumerate the current session projection and do not mutate document state. `SearchHit` preserves its existing positional constructor while adding UTF-16 match offsets, an optional table-cell address and a display path. Whole-word classification uses Unicode rune categories; surrogate-pair boundaries are not returned as matches. One result is returned per matching container (or page title), with the first matching table cell identified explicitly.
+
+`EditorSession.ReplaceAll` does not replace titles, tag labels or filenames. It uses the same matcher, preserves rich-text runs between matches and applies all changes through one generic transaction, with complete validation and rollback. Result limits affect search only. Optional reflow runs inside the transaction; a callback failure rolls back earlier edits. Cancellation is checked while scanning, not inside each platform string-search call. The Uno pane debounces input for 180 ms and skips work when hidden. The shared options control also powers the replace dialog.
+
+Page title/date `SKTextBlob` objects are retained independently of content revisions and cleared on font registration/cache disposal. Light/dark colors and editing visibility do not require rebuilding glyphs. Text-layout cache hits update usage bookkeeping in place instead of allocating a replacement cache record on every frame. These caches do not establish full script shaping, bidirectional layout or typography equivalence with OneNote.
+
+`MaximumImageCacheBytes` bounds retained encoded-plus-decoded image payload (default 64 MiB), with LRU eviction and a separate 24-entry ceiling. It excludes native object overhead, decoding temporaries and GPU copies. Oversized-but-valid images render transiently; invalid decode results can be cached for a stable revision. Revision changes invalidate image content even when a caller reused the byte array, and unversioned callers decode defensively. Live image resize retains the image token while bypassing text-layout revision caching. `RetainedImageBytes`, decode attempts and cache hits expose the implemented work, not estimated process/GPU memory.
+
+## Snapshot persistence and size validation
+
+`WorkspaceSnapshot.Capture` validates and serializes a workspace once, on its single-writer owner, into an immutable string. `Parse` validates external JSON; its private constructor prevents unchecked payloads. `IWorkspaceSnapshotStore` extends the original store interface with a snapshot save method. The built-in file and browser adapters retain token checks and cancellation. Legacy adapters still receive a detached workspace through the original contract. A save acknowledgement applies to the captured change counter, never to edits made while I/O was pending.
+
+`WorkspaceSerialization.MeasureCharacters` uses the generated backup JSON contract with a pooled counting buffer writer to enforce the same inclusive UTF-16 character limit without allocating a complete result string. The buffer writer receives valid UTF-8 only from `Utf8JsonWriter`; ASCII chunks count directly, and non-ASCII scalar leading bytes count one or two UTF-16 units. Continuation bytes contribute zero, including across write boundaries. Page transaction validation and undo/redo use this size-only path. Serialization still visits the complete workspace, so this is an allocation reduction, not a constant-time edit claim. The autosave preparation benchmark excludes actual file/IndexedDB I/O.

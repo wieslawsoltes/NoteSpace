@@ -1,5 +1,7 @@
+import { searchWorkflows } from './search.mjs';
 import { chromium } from 'playwright';
 import { organizationWorkflows } from './organization.mjs';
+import { tableWorkflows } from './tables.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, stat, mkdir, writeFile } from 'node:fs/promises';
@@ -188,7 +190,9 @@ try {
     await page.keyboard.press('ArrowRight');
     await waitState(() => globalThis.noteSpaceState?.pageTitle === 'Nested child' && !globalThis.noteSpaceState.dirty);
 
-    const organizationTests = await organizationWorkflows({ page, state, waitState, settle, output });
+    const suiteErrors = [];
+    const runSuite = async action => { try { return await action(); } catch (error) { suiteErrors.push(error); return []; } };
+    const organizationTests = await runSuite(() => organizationWorkflows({ page, state, waitState, settle, output }));
 
     const conflict = await page.evaluate(async () => {
         const stored = await globalThis.NoteSpaceHost.load();
@@ -199,6 +203,10 @@ try {
     });
     assert.equal(conflict, true, 'IndexedDB rejects stale revisions atomically');
 
+    const tableTests = await runSuite(() => tableWorkflows({ browser, output }));
+    const searchTests = await runSuite(() => searchWorkflows({ browser, output }));
+    if (suiteErrors.length) throw new AggregateError(suiteErrors, 'Browser integration suites failed');
+
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const mobilePage = await mobile.newPage();
     await mobilePage.goto('http://127.0.0.1:4173/NoteSpace/', { waitUntil: 'domcontentloaded' });
@@ -206,8 +214,8 @@ try {
     await mobilePage.screenshot({ path: resolve(output, 'mobile.png') });
     await mobile.close();
     assert.deepEqual(errors, [], 'No unhandled browser errors');
-    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot', ...organizationTests] }, null, 2));
-    console.log(`PASS ${18 + organizationTests.length} browser workflows: editing, rich text, ink, organization, history, persistence, conflict, mobile`);
+    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot', ...organizationTests, ...tableTests, ...searchTests] }, null, 2));
+    console.log(`PASS ${18 + organizationTests.length + tableTests.length + searchTests.length} browser workflows: editing, rich text, ink, organization, history, persistence, conflict, mobile`);
 } catch (error) {
     await inputCheckpoint('failure-input-trace').catch(() => {});
     await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {});

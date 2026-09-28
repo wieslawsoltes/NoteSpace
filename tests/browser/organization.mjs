@@ -23,11 +23,22 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         await page.keyboard.press('Control+a'); await page.keyboard.type(text); await settle();
         await page.keyboard.press('Enter'); await settle();
     };
-    const contextCommand = async (x, y, index) => {
-        await page.mouse.click(x, y, { button: 'right' }); await settle();
-        await page.keyboard.press('Home');
-        for (let i = 0; i < index; i++) await page.keyboard.press('ArrowDown');
-        await page.keyboard.press('Enter'); await settle();
+    const contextCommand = async (id, name) => {
+        // Accessibility activation is per document, not retained across reloads.
+        // Use the public opt-in UI again before resolving a semantic menu item.
+        const enable = page.getByRole('button', { name: 'Enable accessibility', exact: true });
+        if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
+        // F6 is the application's public navigation-focus command; it also reveals
+        // a pane hidden by focus mode or the accessibility activation key routing.
+        await page.keyboard.press('F6'); await settle();
+        const groups = allGroups(await saved());
+        const group = groups.find(g => g.id === id); assert.ok(group);
+        const depth = group.parentId ? 1 : 0;
+        // Fixed canvas layout; nested semantic peers report parent-local bounds.
+        await page.mouse.click(100, 413 + depth * 38, { button: 'right' }); await settle();
+        const item = page.getByRole('menuitem', { name, exact: true });
+        await item.waitFor({ state: 'attached', timeout: 10000 });
+        await item.focus(); await page.keyboard.press('Enter'); await settle();
     };
     // Fixed viewport matches the baseline smoke harness. Grips are at the right
     // edge of the 206px page list; rows are 38px high with a 267px starting Y.
@@ -81,19 +92,27 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         assert.deepEqual(section(await saved()).pages.map(p => [p.id, p.level]), inside.map(p => [p.id, p.level]));
         completed.push('page drag redo and persistence');
 
+        // Menu keyboard focus differs between native and semantic input modes.
+        // Enable the public accessibility UI and target the named rendered item,
+        // rather than assuming Home/ArrowDown selected a particular menu index.
+        const enable = page.getByRole('button', { name: 'Enable accessibility', exact: true });
+        if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
+        if (!await page.locator('[xamlautomationid="page-outline"]').count()) { await page.mouse.click(20, 20); await settle(); }
+
         stage = 'create-section-group'; await page.keyboard.press('Control+Alt+g'); await settle(); await input('Research group');
         await waitState(() => globalThis.noteSpaceState.sectionGroupCount === 1 && !globalThis.noteSpaceState.dirty);
         const group = allGroups(await saved()).find(g => g.title === 'Research group'); assert.ok(group);
         await snapshot('section-group-created'); completed.push('section group creation');
 
-        stage = 'create-nested-group'; await contextCommand(100, 413, 1); await input('Drafts');
+        stage = 'create-nested-group'; await contextCommand(group.id, 'New nested group'); await input('Drafts');
         await waitState(() => globalThis.noteSpaceState.sectionGroupCount === 2 && !globalThis.noteSpaceState.dirty);
         const drafts = allGroups(await saved()).find(g => g.title === 'Drafts'); assert.equal(drafts.parentId, group.id);
         await snapshot('nested-section-groups'); completed.push('nested section group creation');
 
-        stage = 'create-grouped-section'; await contextCommand(100, 451, 0); await input('Research notes');
+        stage = 'create-grouped-section'; await contextCommand(drafts.id, 'New section in group'); await input('Research notes');
         await waitState(() => !!globalThis.noteSpaceState.sectionGroupId && !globalThis.noteSpaceState.dirty);
         assert.equal((await state()).sectionGroupId, drafts.id);
+        assert.equal((await state()).notebookPaneVisible, true, 'Creating a section keeps notebook navigation visible');
         assert.equal(allPages(await saved()).length, allPages(original).length + 1);
         await snapshot('grouped-section'); completed.push('section creation inside group');
 
@@ -107,34 +126,13 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         assert.equal(allGroups(await saved()).find(g => g.id === group.id).isCollapsed, true);
         await snapshot('section-group-collapse'); completed.push('section group collapse persistence');
 
-        stage = 'rename-section-group'; await contextCommand(100, 413, 2); await input('Research archive');
+        stage = 'rename-section-group'; await contextCommand(group.id, 'Rename group'); await input('Research archive');
         await waitState(() => !globalThis.noteSpaceState.dirty);
         assert.equal(allGroups(await saved()).find(g => g.id === group.id).title, 'Research archive');
         completed.push('section group rename');
 
         stage = 'ungroup-section-group';
-        // Enable the framework's public accessibility UI to locate dialog buttons
-        // by their rendered bounds. Mouse input still goes through the real canvas.
-        const enable = page.getByRole('button', { name: 'Enable accessibility', exact: true });
-        if (await enable.count()) { await enable.focus(); await page.keyboard.press('Space'); await settle(); }
-        // Once semantic focus is enabled, use pointer targeting instead of mixing
-        // framework menu navigation with the browser's accessibility key handling.
-        // The framework can forward the enabling Space key to its first focused
-        // toolbar control. Restore navigation with a real click if that collapsed it.
-        const groupRow = page.locator(`[xamlautomationid="group-${group.id}"]`);
-        if (!await groupRow.count()) { await page.mouse.click(20, 20); await settle(); }
-        await groupRow.waitFor({ state: 'attached', timeout: 10000 });
-        const groupBounds = await groupRow.boundingBox();
-        assert.ok(groupBounds && groupBounds.width > 0, 'Section group is visible before opening its menu');
-        await page.mouse.click(groupBounds.x + groupBounds.width / 2, groupBounds.y + groupBounds.height / 2, { button: 'right' });
-        await settle();
-        await snapshot('ungroup-menu');
-        const menuItem = page.getByRole('menuitem', { name: 'Ungroup (keep all notes)', exact: true });
-        await menuItem.waitFor({ state: 'attached', timeout: 10000 });
-        const menuBounds = await menuItem.boundingBox();
-        assert.ok(menuBounds && menuBounds.width > 0, 'Ungroup menu item is rendered');
-        await page.mouse.click(menuBounds.x + menuBounds.width / 2, menuBounds.y + menuBounds.height / 2);
-        await settle();
+        await contextCommand(group.id, 'Ungroup (keep all notes)');
         await snapshot('ungroup-confirmation');
         const ungroup = page.getByRole('button', { name: 'Ungroup', exact: true });
         await ungroup.waitFor({ state: 'attached', timeout: 10000 });
@@ -155,7 +153,7 @@ export async function organizationWorkflows({ page, state, waitState, settle, ou
         console.log(`PASS ${completed.length} organization browser workflows`);
         return completed;
     } catch (error) {
-        await writeFile(resolve(output, 'organization-failure.json'), JSON.stringify({ stage, completed, state: await state(), saved: await saved() }, null, 2));
+        await writeFile(resolve(output, 'organization-failure.json'), JSON.stringify({ stage, error: String(error.stack || error), completed, state: await state(), saved: await saved() }, null, 2));
         await writeFile(resolve(output, 'organization-dom.html'), await page.content());
         throw error;
     }

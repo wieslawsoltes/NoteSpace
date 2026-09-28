@@ -15,7 +15,6 @@ public sealed partial class EditorSession
         var p = new NotePage { Title = CleanTitle(title) };
         Execute("New page", w => { (FindSection(sectionId) ?? throw new ArgumentException("Section not found.")).Pages.Add(p); w.Settings.SelectedPageId = p.Id; }, true); return p;
     }
-    public void EditPage(string pageId, string label, Action<NotePage> edit, bool structure = false) => Execute(label, _ => { var p = FindPage(pageId) ?? throw new ArgumentException("Page not found."); edit(p); p.Modified = DateTimeOffset.Now; }, structure);
     public void RenamePage(string pageId, string title) => EditPage(pageId, "Rename page", p => p.Title = CleanTitle(title), true);
     // Deleting a parent preserves its descendants and promotes them one level.
     public void DeletePage(string pageId)
@@ -59,21 +58,10 @@ public sealed partial class EditorSession
         var snapshot = DocumentJson.ReadPage(p.Versions[index].Json);
         p.Title = snapshot.Title; p.Blocks = snapshot.Blocks; p.Ink = snapshot.Ink; p.Paper = snapshot.Paper; p.PaperColor = snapshot.PaperColor;
     }, true);
-    public IEnumerable<SearchHit> Search(string query, bool tagsOnly = false)
-    {
-        if (string.IsNullOrWhiteSpace(query)) yield break;
-        query = query.Trim();
-        foreach (var (n, s, p) in Pages)
-        {
-            if (!tagsOnly && p.Title.Contains(query, StringComparison.OrdinalIgnoreCase)) yield return new(n.Id, s.Id, p.Id, p.Title, p.Title, null);
-            foreach (var b in p.Blocks)
-            {
-                var content = b.Text + " " + string.Join(" ", b.Cells.SelectMany(r => r));
-                var at = content.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-                if ((!tagsOnly && at >= 0) || b.Tags.Any(t => t.Contains(query, StringComparison.OrdinalIgnoreCase)))
-                { var start = Math.Max(0, at - 30); yield return new(n.Id, s.Id, p.Id, p.Title, content.Substring(start, Math.Min(140, content.Length - start)), b.Id); }
-            }
-        }
-    }
+    public IEnumerable<SearchHit> Search(string query, bool tagsOnly = false) =>
+        string.IsNullOrWhiteSpace(query) ? [] : SearchCore(new(query.Trim()) {
+            Filter = tagsOnly ? NoteSearchFilter.TagsOnly : NoteSearchFilter.AllContent,
+            MaximumResults = int.MaxValue
+        }, default);
     public static string CleanTitle(string title) => string.IsNullOrWhiteSpace(title) ? "Untitled" : title.Trim()[..Math.Min(title.Trim().Length, 500)];
 }
