@@ -96,7 +96,7 @@ public sealed partial class PageRenderer
     private static void DrawTextEdit(SKCanvas canvas, TextEditVisual edit, RenderOptions options)
     {
         var b = edit.Block; canvas.Save(); canvas.ClipRect(SKRect.Create(b.X, b.Y, b.Width, b.Height));
-        using var paint = new SKPaint { IsAntialias = false, Color = new SKColor(options.Dark ? 0x777E9FE6 : 0x554C82CC) };
+        using var paint = new SKPaint { IsAntialias = false, Color = new SKColor(options.Dark ? 0x777E9FE6u : 0x554C82CCu) };
         foreach (var rect in edit.Selection) canvas.DrawRect(SKRect.Create(b.X + rect.X, b.Y + rect.Y, rect.Width, rect.Height), paint);
         if (edit.CaretVisible && edit.Selection.Count == 0)
         {
