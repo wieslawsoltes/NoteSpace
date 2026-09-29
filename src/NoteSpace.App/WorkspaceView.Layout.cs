@@ -77,6 +77,7 @@ public sealed partial class WorkspaceView
     private void UpdateStatus()
     {
         var selected = surface.SelectedBlock;
+        UpdateTextRibbon();
         var tool = surface.Tool == DrawingTool.Select ? "" : " · " + surface.Tool;
         var text = saveStatus + "  ·  " + (CurrentPage is null ? "No page selected" : $"{CurrentPage.Blocks.Count} notes · {CurrentPage.Ink.Count} strokes") + tool;
         if (selected is not null) text += $"  ·  {selected.Kind}";
@@ -87,6 +88,8 @@ public sealed partial class WorkspaceView
         if (!ready) return;
         var state = new RuntimeState
         {
+            RichTextEditing = surface.IsRichTextEditing, TextSelectionStart = surface.TextSelectionStart, TextSelectionLength = surface.TextSelectionLength,
+            TextBold = surface.CurrentTextFormat.Bold, TextItalic = surface.CurrentTextFormat.Italic, TextFontSize = surface.CurrentTextFormat.FontSize,
             EditingTableCell = surface.IsEditingTableCell, TableRow = surface.SelectedTableCell?.Row, TableColumn = surface.SelectedTableCell?.Column,
             HistoryCharacters = session.RetainedHistoryCharacters, SpatialBuilds = surface.Renderer.Statistics.SpatialBuilds,
             LayoutBuilds = surface.Renderer.Statistics.LayoutBuilds, InkPictureBuilds = surface.Renderer.Statistics.InkPictureBuilds,
@@ -108,6 +111,12 @@ public sealed partial class WorkspaceView
 
 internal sealed class RuntimeState
 {
+    public bool RichTextEditing { get; set; }
+    public int TextSelectionStart { get; set; }
+    public int TextSelectionLength { get; set; }
+    public bool TextBold { get; set; }
+    public bool TextItalic { get; set; }
+    public float TextFontSize { get; set; }
     public bool EditingTableCell { get; set; }
     public int? TableRow { get; set; }
     public int? TableColumn { get; set; }

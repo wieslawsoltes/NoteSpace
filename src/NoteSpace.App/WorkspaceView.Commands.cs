@@ -40,19 +40,19 @@ public sealed partial class WorkspaceView
             case "font-up": Format(f => f.FontSize = Math.Min(144, f.FontSize + 2)); return;
             case "font-down": Format(f => f.FontSize = Math.Max(6, f.FontSize - 2)); return;
             case "font":
-                var font = await FontDialogAsync(surface.SelectedBlock?.Format ?? new TextFormat());
+                var font = await FontDialogAsync(surface.CurrentTextFormat);
                 if (font is not null) Format(f => { f.FontFamily = font.Value.Family; f.FontSize = font.Value.Size; }); return;
             case "text-color":
-                var color = await ColorDialogAsync("Font color", surface.SelectedBlock?.Format.Color ?? 0xFF242424);
+                var color = await ColorDialogAsync("Font color", surface.CurrentTextFormat.Color);
                 if (color is not null) Format(f => f.Color = color.Value); return;
             case "text-highlight": ToggleFormat(f => f.Highlight != 0, (f, value) => f.Highlight = value ? 0xFFFFE77A : 0); return;
             case "clear-format":
-                EditSelected("Clear formatting", b => { b.Format = new TextFormat(); b.Marks.Clear(); }); return;
-            case "bullets": ToggleFormat(f => f.Bullets, (f, value) => { f.Bullets = value; f.Numbered = false; }); return;
-            case "numbered": ToggleFormat(f => f.Numbered, (f, value) => { f.Numbered = value; f.Bullets = false; }); return;
-            case "align-left": Format(f => f.Alignment = 0); return;
-            case "align-center": Format(f => f.Alignment = 1); return;
-            case "align-right": Format(f => f.Alignment = 2); return;
+                surface.ClearTextFormatting(); return;
+            case "bullets": var bullets = !surface.CurrentTextFormat.Bullets; surface.FormatParagraph(f => { f.Bullets = bullets; f.Numbered = false; }); return;
+            case "numbered": var numbered = !surface.CurrentTextFormat.Numbered; surface.FormatParagraph(f => { f.Numbered = numbered; f.Bullets = false; }); return;
+            case "align-left": surface.FormatParagraph(f => f.Alignment = 0); return;
+            case "align-center": surface.FormatParagraph(f => f.Alignment = 1); return;
+            case "align-right": surface.FormatParagraph(f => f.Alignment = 2); return;
             case "style-heading": Format(f => { f.FontSize = 26; f.Bold = true; f.Color = 0xFF7030A0; }); return;
             case "style-subheading": Format(f => { f.FontSize = 21; f.Bold = true; f.Color = 0xFF444444; }); return;
             case "style-normal": Format(f => { f.FontSize = 16; f.Bold = false; f.Italic = false; f.Color = 0xFF242424; }); return;
@@ -83,6 +83,24 @@ public sealed partial class WorkspaceView
                     if (surface.SelectedBlock?.Text.Length == 0) surface.InsertText(url);
                 }
                 return;
+            case "copy-format": surface.CopyTextFormat(); return;
+            case "paste-format": surface.PasteTextFormat(); return;
+            case "superscript": ToggleFormat(f => f.Baseline == 1, (f, on) => f.Baseline = on ? 1 : 0); return;
+            case "subscript": ToggleFormat(f => f.Baseline == -1, (f, on) => f.Baseline = on ? -1 : 0); return;
+            case "text-layout": await TextLayoutDialogAsync(); return;
+            case "indent-more": case "indent-less":
+                var flow = surface.CurrentTextFlow; flow.LeftIndent = Math.Clamp(flow.LeftIndent + (command == "indent-more" ? 24 : -24), 0, 500); surface.SetTextFlow(flow); return;
+            case "spacing-single": case "spacing-normal": case "spacing-double":
+                var spacing = surface.CurrentTextFlow; spacing.LineSpacing = command == "spacing-single" ? 1 : command == "spacing-double" ? 2 : 1.45f; surface.SetTextFlow(spacing); return;
+            case "container-layout": await ContainerLayoutDialogAsync(); return;
+            case "bring-forward": case "send-backward":
+                surface.EndEditing(); if (surface.HasPendingText || CurrentPage is null || surface.SelectedBlockId is null) return;
+                var blockId = surface.SelectedBlockId;
+                session.EditPage(CurrentPage.Id, "Reorder note container", p => {
+                    var old = p.Blocks.FindIndex(b => b.Id == blockId); if (old < 0) return;
+                    var next = Math.Clamp(old + (command == "bring-forward" ? 1 : -1), 0, p.Blocks.Count - 1);
+                    var block = p.Blocks[old]; p.Blocks.RemoveAt(old); p.Blocks.Insert(next, block);
+                }); return;
             case "date": surface.InsertText(DateTime.Now.ToString("D")); return;
             case "time": surface.InsertText(DateTime.Now.ToString("t")); return;
             case "datetime": surface.InsertText(DateTime.Now.ToString("f")); return;

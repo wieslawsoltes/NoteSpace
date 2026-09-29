@@ -14,7 +14,7 @@ internal sealed class NoteInputBox : TextBox
     public NoteInputBox() => BeforeTextChanging += (_, e) => { if (suppressNavigationText) e.Cancel = true; };
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (e.Key is VirtualKey.Tab or VirtualKey.Enter)
+        if (e.Key is VirtualKey.Tab or VirtualKey.Enter or VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down or VirtualKey.Home or VirtualKey.End or VirtualKey.PageUp or VirtualKey.PageDown or VirtualKey.Back or VirtualKey.Delete)
         {
             suppressNavigationText = true;
             // Queue before the host's navigation callback so changing to the next

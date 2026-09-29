@@ -78,6 +78,10 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         saveTimer.Tick += async (_, _) => { saveTimer.Stop(); await SaveAsync(); };
         AddShortcut(VirtualKey.G, VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu, "new-section-group");
         AddShortcut(VirtualKey.F6, VirtualKeyModifiers.None, "focus-pages");
+        AddShortcut(VirtualKey.M, VirtualKeyModifiers.Control, "indent-more");
+        AddShortcut(VirtualKey.M, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, "indent-less");
+        AddShortcut(VirtualKey.C, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, "copy-format");
+        AddShortcut(VirtualKey.V, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, "paste-format");
         AddShortcut(VirtualKey.S, VirtualKeyModifiers.Control, "save");
         AddShortcut(VirtualKey.F, VirtualKeyModifiers.Control, "search");
         AddShortcut(VirtualKey.H, VirtualKeyModifiers.Control, "replace");

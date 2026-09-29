@@ -10,7 +10,7 @@ public sealed record RibbonTab(string Title, IReadOnlyList<RibbonGroup> Groups);
 
 public sealed class RibbonGroupControl : UserControl
 {
-    public RibbonGroupControl(RibbonGroup group, OfficeTheme theme, Action<string> invoke)
+    public RibbonGroupControl(RibbonGroup group, OfficeTheme theme, Action<string> invoke, Action<string, OfficeButton>? register = null)
     {
         var root = new Grid { Margin = new Thickness(4, 2, 4, 2), Padding = new Thickness(2, 0, 10, 0), BorderBrush = OfficeTheme.Brush(theme.Border), BorderThickness = new Thickness(0, 0, 1, 0) };
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) }); root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(19) });
@@ -20,6 +20,7 @@ public sealed class RibbonGroupControl : UserControl
         {
             var button = new OfficeButton(command.Label, command.Icon, () => invoke(command.Id), command.Hint ?? command.Label, !command.Compact, theme);
             AutomationProperties.SetAutomationId(button, "command-" + command.Id);
+            register?.Invoke(command.Id, button);
             if (command.Compact)
             {
                 if (compact is null || count == 3) { compact = new StackPanel { Spacing = 0 }; body.Children.Add(compact); count = 0; }
@@ -45,6 +46,18 @@ public sealed class RibbonControl : UserControl
     public OfficeTheme Theme { get; private set; } = OfficeTheme.Light;
     public string ActiveTab { get; private set; } = "Home";
     public bool Collapsed { get; private set; }
+    private readonly Dictionary<string, OfficeButton> commandButtons = new();
+    private readonly Dictionary<string, (bool Selected, bool Enabled)> commandStates = new();
+    public void SetCommandState(string id, bool selected, bool enabled = true)
+    {
+        commandStates[id] = (selected, enabled);
+        if (commandButtons.TryGetValue(id, out var button)) { button.Selected = selected; button.IsEnabled = enabled; }
+    }
+    private void RegisterCommand(string id, OfficeButton button)
+    {
+        commandButtons[id] = button;
+        if (commandStates.TryGetValue(id, out var state)) { button.Selected = state.Selected; button.IsEnabled = state.Enabled; }
+    }
     public RibbonControl()
     {
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(38) }); root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -70,9 +83,9 @@ public sealed class RibbonControl : UserControl
             AutomationProperties.SetAutomationId(button, "tab-" + tab.Title.ToLowerInvariant()); tabs.Children.Add(button);
         }
         tabs.Children.Add(new OfficeButton(Collapsed ? "⌄" : "⌃", "", () => CommandInvoked?.Invoke(this, "collapse-ribbon"), "Collapse or expand the ribbon", theme: Theme) { Width = 32 });
-        groups.Children.Clear();
+        commandButtons.Clear(); groups.Children.Clear();
         var active = definitions.FirstOrDefault(t => t.Title == ActiveTab);
-        if (active is not null) foreach (var group in active.Groups) groups.Children.Add(new RibbonGroupControl(group, Theme, id => CommandInvoked?.Invoke(this, id)));
+        if (active is not null) foreach (var group in active.Groups) groups.Children.Add(new RibbonGroupControl(group, Theme, id => CommandInvoked?.Invoke(this, id), RegisterCommand));
         groupScroll.Visibility = Collapsed ? Visibility.Collapsed : Visibility.Visible;
     }
 }

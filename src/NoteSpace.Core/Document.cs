@@ -65,6 +65,7 @@ public sealed class NoteBlock
     public string Text { get; set; } = "";
     public TextFormat Format { get; set; } = new();
     public List<TextMark> Marks { get; set; } = [];
+    public TextFlowSettings TextFlow { get; set; } = new();
     public bool Checked { get; set; }
     public List<string> Tags { get; set; } = [];
     public List<List<string>> Cells { get; set; } = [];
@@ -81,6 +82,8 @@ public sealed class TextFormat
     public bool Italic { get; set; }
     public bool Underline { get; set; }
     public bool Strike { get; set; }
+    /// <summary>-1 subscript, 0 normal, 1 superscript. FontSize remains the nominal size.</summary>
+    public int Baseline { get; set; }
     public uint Color { get; set; } = 0xFF242424;
     public uint Highlight { get; set; }
     public int Alignment { get; set; }
@@ -161,7 +164,7 @@ public static class DocumentJson
         var pageCount = 0; var blockCount = 0; long points = 0;
         void Identity(string id) { if (string.IsNullOrWhiteSpace(id) || id.Length > 100 || !ids.Add(id)) throw new InvalidDataException("Missing or duplicate object identity."); }
         void Title(string title) { if (title is null || title.Length > 500) throw new InvalidDataException("Invalid title."); }
-        void Format(TextFormat f) { if (f is null || f.FontFamily is null || f.FontFamily.Length > 200 || !float.IsFinite(f.FontSize) || f.FontSize < 6 || f.FontSize > 144 || f.Alignment is < 0 or > 2) throw new InvalidDataException("Invalid text formatting."); }
+        void Format(TextFormat f) { if (f is null || f.FontFamily is null || f.FontFamily.Length > 200 || !float.IsFinite(f.FontSize) || f.FontSize < 6 || f.FontSize > 144 || f.Alignment is < 0 or > 2 || f.Baseline is < -1 or > 1) throw new InvalidDataException("Invalid text formatting."); }
         void Page(NotePage p)
         {
             if (p is null || ++pageCount > 10000) throw new InvalidDataException("Too many pages.");
@@ -175,6 +178,8 @@ public static class DocumentJson
                 if (!Enum.IsDefined(b.Kind) || !float.IsFinite(b.X) || !float.IsFinite(b.Y) || !float.IsFinite(b.Width) || !float.IsFinite(b.Height) || b.X < 0 || b.Y < 0 || b.X > 100000 || b.Y > 100000 || b.Width is < 24 or > 20000 || b.Height is < 12 or > 20000) throw new InvalidDataException("Invalid note geometry.");
                 if (b.Text is null || b.Text.Length > 2 * 1024 * 1024 || b.Marks is null || b.Tags is null || b.Cells is null || b.FileName is null || b.MediaType is null || b.Marks.Count > 10000 || b.Tags.Count > 100 || b.Cells.Count > 500) throw new InvalidDataException("Invalid note content.");
                 Format(b.Format);
+                if (b.TextFlow is null) throw new InvalidDataException("Missing text layout settings.");
+                b.TextFlow.Validate();
                 foreach (var m in b.Marks) { if (m is null || m.Start < 0 || m.Length < 0 || (long)m.Start + m.Length > b.Text.Length) throw new InvalidDataException("Invalid text range."); Format(m.Format); }
                 foreach (var t in b.Tags) if (t is null || t.Length > 200) throw new InvalidDataException("Invalid tag.");
                 foreach (var row in b.Cells) if (row is null || row.Count > 50 || row.Any(c => c is null || c.Length > 100000)) throw new InvalidDataException("Invalid table.");
@@ -192,7 +197,7 @@ public static class DocumentJson
             if (n is null || n.Sections is null || n.Sections.Count > 1000) throw new InvalidDataException("Invalid notebook.");
             Identity(n.Id); Title(n.Title);
             NotebookGroups.Validate(n);
-            foreach (var group in n.SectionGroups) { Identity(group.Id); Title(group.Title); }
+            foreach (var group in n.SectionGroups) Identity(group.Id);
             foreach (var s in n.Sections) { if (s is null || s.Pages is null) throw new InvalidDataException("Invalid section."); Identity(s.Id); Title(s.Title); foreach (var p in s.Pages) Page(p); }
         }
         foreach (var d in w.Trash) { if (d is null || d.SectionId is null) throw new InvalidDataException("Invalid recycle bin."); Page(d.Page); }

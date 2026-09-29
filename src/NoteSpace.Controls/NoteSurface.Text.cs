@@ -20,7 +20,7 @@ public sealed partial class NoteSurface
         if (block.Kind == BlockKind.Table) throw new InvalidOperationException("Table cells use plain text. Select a text note for range formatting.");
         var start = editor is not null && !editingTitle ? editor.SelectionStart : 0;
         var length = editor is not null && !editingTitle ? editor.SelectionLength : 0;
-        var enabled = !RichText.AllHave(block, start, length, read);
+        var enabled = richDraft is not null ? !richDraft.AllHave(read) : !RichText.AllHave(block, start, length, read);
         FormatSelection(format => write(format, enabled));
     }
 
@@ -28,6 +28,11 @@ public sealed partial class NoteSurface
     {
         FlushPendingText(); if (HasPendingText || SelectedBlock is not { } block || session is null || Page is null) return;
         if (block.Kind == BlockKind.Table) throw new InvalidOperationException("Table cells use plain text. Select a text note for range formatting.");
+        if (richDraft is not null)
+        {
+            richDraft.Format(apply, link); FlushPendingText(); UpdateRichAdorners(); FocusTextEditor();
+            SelectionChanged?.Invoke(this, EventArgs.Empty); return;
+        }
         var start = editor is not null && !editingTitle ? editor.SelectionStart : 0;
         var length = editor is not null && !editingTitle ? editor.SelectionLength : 0;
         session.EditPage(Page.Id, "Format text", p => {
@@ -42,6 +47,7 @@ public sealed partial class NoteSurface
         if (Page is null) return;
         if (editor is null) { if (SelectedBlock is { Kind: BlockKind.Text or BlockKind.Heading or BlockKind.Checklist } b) BeginEdit(b); else NewText(); }
         if (editor is null) return;
+        if (richDraft is not null) { richDraft.ReplaceSelection(text); SyncRichInput(); editor.Focus(FocusState.Programmatic); return; }
         var start = editor.SelectionStart; var length = editor.SelectionLength;
         editor.Text = editor.Text[..start] + text + editor.Text[(start + length)..]; editor.SelectionStart = start + text.Length; editor.SelectionLength = 0;
         editor.Focus(FocusState.Programmatic);
@@ -62,7 +68,7 @@ public sealed partial class NoteSurface
         EndEditing(); if (pendingText) return;
         SelectedBlockId = block.Id; canvas.Options.SelectedId = block.Id;
         editingPageId = Page.Id; editingBlockId = block.Id; editingTitle = false;
-        CreateEditor(block.Text, block.Format); canvas.Options.EditingId = block.Id;
+        StartRichEditing(block); CreateEditor(block.Text, block.Format); canvas.Options.EditingId = null; UpdateRichAdorners();
         PositionEditor(); canvas.Invalidate(); SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
     private void CreateEditor(string text, TextFormat format)
@@ -75,13 +81,15 @@ public sealed partial class NoteSurface
         // synchronous change as well, and always reconcile the actual value at commit.
         box.TextChanging += (_, _) => {
             if (editor != box || switchingCell) return;
-            pendingText = box.Text != committedText;
+            if (richDraft is not null) RichNativeTextChanged(box);
+            pendingText = box.Text != committedText || richDraft is not null && richDraft.Version != committedRichVersion;
             typingTimer.Stop(); if (pendingText) typingTimer.Start();
             DraftChanged?.Invoke(this, EventArgs.Empty);
         };
         box.TextChanged += (_, _) => { if (editor == box) PositionEditor(); };
         box.HandleKey = e => {
             if (editor != box) return false;
+            if (HandleRichKey(e)) return true;
             var backwards = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
             var controlDown = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
             if (editingCell.HasValue && (e.Key == VirtualKey.Tab || e.Key == VirtualKey.Enter && !controlDown))
@@ -100,6 +108,7 @@ public sealed partial class NoteSurface
         // Register before adding to an already loaded tree, then focus after the
         // initiating accelerator/pointer event and layout have completed.
         box.Loaded += (_, _) => QueueFocus();
+        ConfigureRichInput(box);
         overlay.Children.Add(box); box.SelectionStart = box.Text.Length;
         QueueFocus();
     }
@@ -114,6 +123,7 @@ public sealed partial class NoteSurface
     public void FlushPendingText()
     {
         if (updating) return;
+        if (richDraft is not null) { FlushRichDraft(); return; }
         typingTimer.Stop();
         if (editor is null || session is null || editingPageId is null) return;
         var box = editor; var pageId = editingPageId; var blockId = editingBlockId;
@@ -147,7 +157,7 @@ public sealed partial class NoteSurface
     public void EndEditing() { FlushPendingText(); if (!updating && !HasPendingText) CancelEditor(); }
     private void CancelEditor()
     {
-        typingTimer.Stop(); var old = editor; editor = null;
+        StopRichEditing(); typingTimer.Stop(); var old = editor; editor = null;
         if (old is not null) overlay.Children.Remove(old);
         editingPageId = null; editingBlockId = null; editingTitle = false; editingCell = null; pendingText = false; committedText = "";
         canvas.Options.EditingId = null; canvas.Options.EditingTitle = false; canvas.Invalidate();
@@ -155,6 +165,7 @@ public sealed partial class NoteSurface
     private void PositionEditor()
     {
         if (editor is null) return;
+        if (richDraft is not null) { PositionRichInput(); return; }
         var b = Page?.Blocks.FirstOrDefault(b => b.Id == editingBlockId);
         if (editingCell is { } cell && b is { Kind: BlockKind.Table })
         {

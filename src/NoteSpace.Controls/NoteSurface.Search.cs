@@ -20,7 +20,9 @@ public sealed partial class NoteSurface
         if (editor is not null && hit.Start >= 0)
         {
             var start = Math.Clamp(hit.Start, 0, editor.Text.Length);
-            editor.Select(start, Math.Clamp(hit.Length, 0, editor.Text.Length - start));
+            var end = start + Math.Clamp(hit.Length, 0, editor.Text.Length - start);
+            if (richDraft is not null) SetRichSelection(start, end);
+            else editor.Select(start, end - start);
         }
     }
 }

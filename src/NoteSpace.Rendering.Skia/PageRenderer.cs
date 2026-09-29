@@ -11,6 +11,7 @@ public sealed class RenderOptions
     /// <summary>Optional host content token. Advance after every page mutation. Without
     /// a token, spatial geometry is rebuilt on every render for mutable-DTO safety.</summary>
     public long? ContentRevision { get; set; }
+    public TextEditVisual? TextEdit { get; set; }
     public float Zoom { get; set; } = 1;
     public float OffsetX { get; set; }
     public float OffsetY { get; set; }
@@ -24,12 +25,16 @@ public sealed class RenderOptions
     public InkStroke? PreviewInk { get; set; }
     public ISet<string>? HiddenInk { get; set; }
 }
-public sealed record TextFragment(string Text, float X, float Baseline, float Width, TextFormat Format);
+public sealed record TextFragment(string Text, float X, float Baseline, float Width, TextFormat Format)
+{
+    public int SourceStart { get; init; } = -1;
+    public bool IsTab => Text == "\t";
+}
 public sealed record TextLayout(IReadOnlyList<TextFragment> Fragments, float Height)
 {
     internal IReadOnlyList<TextLine> Lines { get; init; } = [];
 }
-internal readonly record struct TextLine(int First, int Count, float Top, float Bottom);
+internal readonly record struct TextLine(int First, int Count, float Top, float Bottom, int Start, int End, int NextStart, float Left);
 
 /// <summary>Viewport renderer without an Uno dependency. Instances own their native caches.</summary>
 public sealed partial class PageRenderer : IDisposable
@@ -88,6 +93,11 @@ public sealed partial class PageRenderer : IDisposable
             var at = index.BlockIndex(preview.Id);
             if (at >= 0 && visibleBlocks.BinarySearch(at) < 0) { visibleBlocks.Add(at); visibleBlocks.Sort(); }
         }
+        if (o.TextEdit is { } edit && edit.Block.Bounds.Intersects(viewport))
+        {
+            var at = index.BlockIndex(edit.Block.Id);
+            if (at >= 0 && visibleBlocks.BinarySearch(at) < 0) { visibleBlocks.Add(at); visibleBlocks.Sort(); }
+        }
         canvas.Save();
         try
         {
@@ -96,8 +106,9 @@ public sealed partial class PageRenderer : IDisposable
             if (viewport.Y < 118) DrawHeader(canvas, page, o);
             foreach (var at in visibleBlocks)
             {
-                var original = page.Blocks[at]; var b = o.PreviewBlock?.Id == original.Id ? o.PreviewBlock : original;
-                if (o.EditingId != b.Id) DrawBlock(canvas, b, o.Dark, viewport, o.ContentRevision, ReferenceEquals(b, o.PreviewBlock));
+                var original = page.Blocks[at]; var b = o.TextEdit?.Block.Id == original.Id ? o.TextEdit.Block : o.PreviewBlock?.Id == original.Id ? o.PreviewBlock : original;
+                if (o.EditingId != b.Id) DrawBlock(canvas, b, o.Dark, viewport, o.ContentRevision, ReferenceEquals(b, o.PreviewBlock) || ReferenceEquals(b, o.TextEdit?.Block));
+                if (o.TextEdit?.Block.Id == b.Id) DrawTextEdit(canvas, o.TextEdit, o);
                 if (b.Id == o.SelectedId || b.Id == o.HoverId) DrawContainer(canvas, b, b.Id == o.SelectedId);
                 if (b.Id == o.SelectedId && b.Kind == BlockKind.Table && o.SelectedCell is { } cell && cell.Row < b.Cells.Count && cell.Column < NoteTable.ColumnCount(b) && cell.Row >= 0 && cell.Column >= 0)
                 {
@@ -169,7 +180,7 @@ public sealed partial class PageRenderer : IDisposable
                     paint.Color = new SKColor(color);
                     var x = b.X + run.X; var baseline = b.Y + 12 + run.Baseline;
                     if (f.Highlight != 0) { paint.Color = new SKColor(f.Highlight); canvas.DrawRect(x, baseline - f.FontSize, run.Width, f.FontSize * 1.3f, paint); paint.Color = new SKColor(color); }
-                    canvas.DrawText(run.Text, x, baseline, SKTextAlign.Left, Font(f), paint);
+                    if (!run.IsTab) canvas.DrawText(run.Text, x, baseline, SKTextAlign.Left, Font(f), paint);
                     paint.StrokeWidth = Math.Max(1, f.FontSize / 16);
                     if (f.Underline) canvas.DrawLine(x, baseline + 2, x + run.Width, baseline + 2, paint);
                     if (f.Strike || b.Checked) canvas.DrawLine(x, baseline - f.FontSize * 0.3f, x + run.Width, baseline - f.FontSize * 0.3f, paint);

@@ -50,7 +50,11 @@ public static class NoteExport
             else if (b.Kind is BlockKind.Image or BlockKind.Attachment) html.Append("<section>Attachment: ").Append(E(b.FileName)).Append(" (available in the NoteSpace backup)</section>");
             else
             {
-                html.Append("<section>"); if (b.Kind == BlockKind.Checklist) html.Append(b.Checked ? "☑ " : "☐ ");
+                html.Append("<section style=\"text-align:").Append(b.Format.Alignment == 1 ? "center" : b.Format.Alignment == 2 ? "right" : "left")
+                    .Append(";line-height:").Append(b.TextFlow.LineSpacing.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    .Append(";padding-left:").Append(b.TextFlow.LeftIndent.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append("px;padding-right:")
+                    .Append(b.TextFlow.RightIndent.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append("px;text-indent:")
+                    .Append(b.TextFlow.FirstLineIndent.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append("px;\">"); if (b.Kind == BlockKind.Checklist) html.Append(b.Checked ? "☑ " : "☐ ");
                 var bounds = new SortedSet<int> { 0, b.Text.Length }; foreach (var m in b.Marks) { bounds.Add(m.Start); bounds.Add(m.Start + m.Length); }
                 var indices = bounds.ToArray();
                 for (var i = 0; i < indices.Length - 1; i++)
@@ -58,6 +62,7 @@ public static class NoteExport
                     var pos = indices[i]; var mark = b.Marks.LastOrDefault(m => pos >= m.Start && pos < m.Start + m.Length); var f = mark?.Format ?? b.Format;
                     var text = E(b.Text[pos..indices[i + 1]]);
                     html.Append("<span style=\"font-size:").Append(f.FontSize.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append("px;color:#").Append((f.Color & 0xFFFFFF).ToString("X6")).Append(';');
+                    if (f.Baseline != 0) html.Append(f.Baseline > 0 ? "vertical-align:super;font-size:70%;" : "vertical-align:sub;font-size:70%;");
                     if (f.Highlight != 0) html.Append("background:#").Append((f.Highlight & 0xFFFFFF).ToString("X6")).Append(';');
                     if (f.Bold) html.Append("font-weight:700;"); if (f.Italic) html.Append("font-style:italic;");
                     if (f.Underline || f.Strike) html.Append("text-decoration:").Append(f.Underline ? "underline " : "").Append(f.Strike ? "line-through" : "").Append(';');

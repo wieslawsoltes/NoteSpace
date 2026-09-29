@@ -49,6 +49,13 @@ internal static class RibbonDefinitions
             new("Columns", [C("table-column-left", "Insert Left", "add", true), C("table-column-right", "Insert Right", "add", true), C("table-delete-column", "Delete Column", "trash", true)]),
             new("Data", [C("table-copy", "Copy Table", "copy"), C("table-paste", "Paste Cells", "clipboard"), C("table-transpose", "Transpose", "table")])
         ]),
+        new("Layout", [
+            new("Character", [C("superscript", "Superscript", "text", true), C("subscript", "Subscript", "text", true), C("clear-format", "Clear format", "eraser", true)]),
+            new("Format Painter", [C("copy-format", "Copy Format", "copy"), C("paste-format", "Paste Format", "clipboard")]),
+            new("Indent", [C("indent-more", "Increase Indent", "align-right", true), C("indent-less", "Decrease Indent", "align-left", true), C("text-layout", "Text Layout…", "text", true)]),
+            new("Line Spacing", [C("spacing-single", "Single", "text", true), C("spacing-normal", "Normal", "text", true), C("spacing-double", "Double", "text", true)]),
+            new("Container", [C("container-layout", "Size & Position", "rectangle"), C("bring-forward", "Bring Forward", "page", true), C("send-backward", "Send Backward", "page", true)])
+        ]),
         new("Help", [new("NoteSpace", [C("shortcuts", "Get Started", "book"), C("about", "About", "?"), C("export", "Back Up", "download")])])
     ];
 }
