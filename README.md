@@ -5,6 +5,8 @@
 [![Build, test and deploy](https://github.com/wieslawsoltes/NoteSpace/actions/workflows/build.yml/badge.svg)](https://github.com/wieslawsoltes/NoteSpace/actions/workflows/build.yml)
 [![Release](https://github.com/wieslawsoltes/NoteSpace/actions/workflows/release.yml/badge.svg)](https://github.com/wieslawsoltes/NoteSpace/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-803AB3.svg)](LICENSE)
+[![NuGet](https://img.shields.io/nuget/vpre/NoteSpace.Core.svg?label=NuGet)](https://www.nuget.org/packages/NoteSpace.Core)
+[![Downloads](https://img.shields.io/nuget/dt/NoteSpace.Core.svg)](https://www.nuget.org/packages/NoteSpace.Core)
 
 [**Open the browser application**](https://wieslawsoltes.github.io/NoteSpace/) · [Builds and packages](https://github.com/wieslawsoltes/NoteSpace/actions) · [Architecture](docs/architecture.md) · [Report an issue](https://github.com/wieslawsoltes/NoteSpace/issues)
 
@@ -84,48 +86,200 @@ Every [release](https://github.com/wieslawsoltes/NoteSpace/releases/latest) ship
 
 Extract and run `NoteSpace` (`NoteSpace.exe` on Windows). Builds are not code-signed yet: on macOS clear the quarantine flag with `xattr -d com.apple.quarantine NoteSpace`; on Windows choose **More info → Run anyway** in SmartScreen. Verify downloads against `SHA256SUMS`.
 
-The libraries below are published to [NuGet.org](https://www.nuget.org/packages?q=NoteSpace), e.g. `dotnet add package NoteSpace.Core`.
+## NuGet packages
 
-## Reusable libraries
+All five libraries are MIT-licensed, versioned together with the app and published to [NuGet.org](https://www.nuget.org/packages?q=NoteSpace) on tagged releases, with symbol packages (`.snupkg`) and SourceLink. Every package targets `net10.0`. `NoteSpace.Core`, `NoteSpace.Editor` and `NoteSpace.Storage` have no UI dependency, and `NoteSpace.Rendering.Skia` needs only SkiaSharp. `NoteSpace.Controls` is an Uno Platform library (Uno.Sdk, Skia renderer) that depends on Uno.WinUI and SkiaSharp.Views.Uno.WinUI. No library references the app. The app supplies the storage, file and clipboard platform adapters and composes the controls.
 
-No library references the app. Each package can be built independently; the app supplies storage/file/clipboard platform adapters and composes the controls.
-
-| Package | Responsibility |
-| --- | --- |
-| `NoteSpace.Core` | Notebook/rich-text/ink model, geometry, source-generated JSON and validation; no Uno or Skia dependency. |
-| `NoteSpace.Editor` | Transactions/history, page/section-group operations, scoped search/replacement, rich-text edits, table/TSV operations and spatial indexes; no UI dependency. |
-| `NoteSpace.Storage` | Persistence contract, atomic file storage, conflict handling and supported import/export formats. |
-| `NoteSpace.Rendering.Skia` | Independent page composition, text layout, viewport culling, bounded native caches and PNG export; no Uno dependency. |
-| `NoteSpace.Controls` | Uno note surface, canvas adapter, ribbon, notebook/page navigation, search/options, table editor, themes, icons, palettes, backstage and status controls. |
-
-```sh
-dotnet pack src/NoteSpace.Core -c Release -o artifacts/packages
-dotnet pack src/NoteSpace.Controls -c Release -o artifacts/packages
+```bash
+dotnet add package NoteSpace.Core
 ```
 
+| Package | Version | Downloads | Description |
+|---|---|---|---|
+| [NoteSpace.Core](https://www.nuget.org/packages/NoteSpace.Core) | [![NuGet](https://img.shields.io/nuget/vpre/NoteSpace.Core.svg)](https://www.nuget.org/packages/NoteSpace.Core) | [![Downloads](https://img.shields.io/nuget/dt/NoteSpace.Core.svg)](https://www.nuget.org/packages/NoteSpace.Core) | Notebook, rich-text and ink model, geometry, source-generated JSON and validation. |
+| [NoteSpace.Editor](https://www.nuget.org/packages/NoteSpace.Editor) | [![NuGet](https://img.shields.io/nuget/vpre/NoteSpace.Editor.svg)](https://www.nuget.org/packages/NoteSpace.Editor) | [![Downloads](https://img.shields.io/nuget/dt/NoteSpace.Editor.svg)](https://www.nuget.org/packages/NoteSpace.Editor) | Transactions/history, page and section-group operations, scoped search/replace, rich text, tables and indexes. |
+| [NoteSpace.Storage](https://www.nuget.org/packages/NoteSpace.Storage) | [![NuGet](https://img.shields.io/nuget/vpre/NoteSpace.Storage.svg)](https://www.nuget.org/packages/NoteSpace.Storage) | [![Downloads](https://img.shields.io/nuget/dt/NoteSpace.Storage.svg)](https://www.nuget.org/packages/NoteSpace.Storage) | Persistence contracts, atomic file storage, conflict detection and text/Markdown/HTML interchange. |
+| [NoteSpace.Rendering.Skia](https://www.nuget.org/packages/NoteSpace.Rendering.Skia) | [![NuGet](https://img.shields.io/nuget/vpre/NoteSpace.Rendering.Skia.svg)](https://www.nuget.org/packages/NoteSpace.Rendering.Skia) | [![Downloads](https://img.shields.io/nuget/dt/NoteSpace.Rendering.Skia.svg)](https://www.nuget.org/packages/NoteSpace.Rendering.Skia) | SkiaSharp page composition, text layout, viewport culling, bounded caches and PNG export. |
+| [NoteSpace.Controls](https://www.nuget.org/packages/NoteSpace.Controls) | [![NuGet](https://img.shields.io/nuget/vpre/NoteSpace.Controls.svg)](https://www.nuget.org/packages/NoteSpace.Controls) | [![Downloads](https://img.shields.io/nuget/dt/NoteSpace.Controls.svg)](https://www.nuget.org/packages/NoteSpace.Controls) | Uno note surface, ribbon, notebook/page navigation, search options, table editor, themes and icons. |
+
+Dependencies follow the project references: `Editor` and `Storage` → `Core`; `Rendering.Skia` → `Editor` + SkiaSharp; `Controls` → `Editor` + `Rendering.Skia` + Uno Platform. To build packages locally, run `dotnet pack src/<Project> -c Release -o artifacts/packages`.
+
+### NoteSpace.Core
+
+The portable notebook model: workspaces, notebooks, nested section groups, sections, pages with subpage levels, free-form note blocks (text, headings, checklists, tables, images, attachments), rich-text marks, ink strokes and page versions, plus source-generated JSON serialization with full validation. No dependencies and no UI.
+
+```bash
+dotnet add package NoteSpace.Core
+```
+
+**Key types** (namespace `NoteSpace.Core`)
+
+- `Workspace` / `Notebook` / `NoteSection` / `SectionGroup` / `NotePage` – the organization tree.
+- `NoteBlock` – positioned content with `Kind`, `Text`, `Format`, `Marks`, `Tags`, `Cells` and attachment `Data`.
+- `TextFormat`, `TextMark`, `InkStroke`/`InkPoint`, `NoteRect` – formatting, ink and geometry.
+- `DocumentJson` – `Serialize`, `Deserialize` (validating), `Validate`, `Clone`, `PageJson`/`ReadPage`.
+- `NotebookGroups` / `SampleWorkspace` – section-group outline helpers and the sample notebook.
+
+**Usage**
+
 ```csharp
+using NoteSpace.Core;
+
+var page = new NotePage { Title = "Kickoff", Paper = PaperStyle.Ruled };
+page.Blocks.Add(new NoteBlock { Kind = BlockKind.Heading, Text = "Agenda", Format = new TextFormat { FontSize = 24, Bold = true } });
+page.Blocks.Add(new NoteBlock { Kind = BlockKind.Checklist, Text = "Book a room", Y = 200, Height = 42, Tags = ["todo"] });
+page.Ink.Add(new InkStroke { Points = [new InkPoint(40, 320), new InkPoint(120, 340, 0.8f)] });
+
+var workspace = new Workspace { Notebooks = [new Notebook { Title = "Research", Sections = [new NoteSection { Title = "Ideas", Pages = [page] }] }] };
+DocumentJson.Validate(workspace);
+string json = DocumentJson.Serialize(workspace);          // source-generated, trimming-friendly
+Workspace restored = DocumentJson.Deserialize(json);      // validates identities, geometry and limits
+```
+
+### NoteSpace.Editor
+
+The headless editing engine: an undoable `EditorSession` over a workspace with page, subpage, section and section-group operations, scoped literal search and style-preserving replace, rich-text range formatting, table/TSV operations, ink geometry and spatial page indexes. Depends on `NoteSpace.Core`; no UI.
+
+```bash
+dotnet add package NoteSpace.Editor
+```
+
+**Key types** (namespace `NoteSpace.Editor`)
+
+- `EditorSession` – `EditPage`, `Execute`, `AddPage`/`AddSubpage`/`AddSection`, `Undo`/`Redo`, `SelectedPage`, `Changed`.
+- `NoteSearchQuery` / `SearchHit` – scoped search (`Search`) and `ReplaceAll` with case/whole-word/tag/to-do filters.
+- `RichText` – `Apply`, `GetRuns`, `ReplaceRange` over mixed-style ranges.
+- `NoteTable` – cell edits, row/column insertion, `Transpose`, `ToTsv`/`ParseTsv`.
+- `PageOutline`, `LiteralTextSearch`, `PageContentIndex`, `InkGeometry` – reusable helpers.
+
+**Editing contract:** the session is single-writer. A successful `EditPage` replaces that page DTO, so keep IDs and resolve current objects after edits; its callback must mutate only the supplied detached page. Use `Execute` for cross-page and organization operations. Hosts that change collections outside transactions must call `InvalidateIndexes()`, and such changes get no undo or autosave notification. `SearchHit.Start`/`Length` are UTF-16 offsets and `Cell` identifies table matches.
+
+**Usage**
+
+```csharp
+using NoteSpace.Core;
+using NoteSpace.Editor;
+
+var session = new EditorSession(SampleWorkspace.Create());
+session.Changed += (_, change) => Console.WriteLine(change.Description);
+
+var page = session.AddPage(session.Pages.First().Section.Id, "Draft notes");
+session.AddBlock(page.Id, SampleWorkspace.Text("First draft of the plan", 48, 140, 520, 80));
+session.EditPage(page.Id, "Bold first word", p => RichText.Apply(p.Blocks[0], 0, 5, f => f.Bold = true));
+
+var query = new NoteSearchQuery("draft") { Scope = NoteSearchScope.Page, ScopeId = page.Id, WholeWord = true };
+var hits = session.Search(query).ToList();
+NoteReplaceResult result = session.ReplaceAll(query, "reviewed");   // one undoable transaction
+Console.WriteLine($"{hits.Count} hits, {result.Matches} replaced; undo: {session.UndoDescription}");
+session.Undo();
+```
+
+### NoteSpace.Storage
+
+Persistence and interchange: the `IWorkspaceStore` contract with optimistic tokens, a desktop/CLI `FileWorkspaceStore` (exclusive lock, same-directory temporary file, atomic replace), validated immutable `WorkspaceSnapshot`s for fast autosave, and text/limited-Markdown import plus Markdown and escaped HTML export. Depends on `NoteSpace.Core`; no UI.
+
+```bash
+dotnet add package NoteSpace.Storage
+```
+
+**Key types** (namespace `NoteSpace.Storage`)
+
+- `IWorkspaceStore` / `IWorkspaceSnapshotStore` – `LoadAsync`, `SaveAsync`, `SaveSnapshotAsync` with expected tokens.
+- `FileWorkspaceStore` – atomic file-backed store for desktop and CLI hosts.
+- `WorkspaceSnapshot` – `Capture(workspace)` and validating `Parse(json)`.
+- `StorageConflictException` – thrown when another window saved first.
+- `NoteExport` – `Markdown`, `Html`, `ImportText`, `SafeFileName`.
+
+**Usage**
+
+```csharp
+using NoteSpace.Core;
+using NoteSpace.Storage;
+
+var store = new FileWorkspaceStore(Path.Combine(AppContext.BaseDirectory, "workspace.notespace"));
+StoredWorkspace? stored = await store.LoadAsync();
+Workspace workspace = stored?.Document ?? SampleWorkspace.Create();
+try
+{
+    string token = await store.SaveSnapshotAsync(WorkspaceSnapshot.Capture(workspace), stored?.Token);
+}
+catch (StorageConflictException) { /* Changed elsewhere: export, then reload before saving. */ }
+
+var page = workspace.Notebooks[0].Sections[0].Pages[0];
+File.WriteAllText("page.md", NoteExport.Markdown(page));
+NotePage imported = NoteExport.ImportText("Shopping\n\n[ ] Milk", "Imported");
+```
+
+### NoteSpace.Rendering.Skia
+
+An independent SkiaSharp page renderer: paper styles, rich text layout, tables, images, attachments and ink with per-line/per-cell viewport culling, revision-keyed layout reuse, bounded image caches and PNG export. Use it for headless thumbnails and exports or inside any Skia canvas. Depends on `NoteSpace.Editor` and SkiaSharp; no Uno dependency. Include the Skia native-assets package for your platform.
+
+```bash
+dotnet add package NoteSpace.Rendering.Skia
+```
+
+**Key types** (namespace `NoteSpace.Rendering.Skia`)
+
+- `PageRenderer` – `Render(canvas, page, width, height, options)`, `ExportPng(page, scale)`, `RegisterTypeface`, `Layout(block)`.
+- `RenderOptions` – `Zoom`, offsets, `Dark`, selection/editing state and `ContentRevision` for cache reuse.
+- `RendererStatistics` – cache hits, layout builds and drawn blocks/cells for diagnostics.
+- `TextLayout` / `TextFragment` – measured text lines for hit testing.
+
+**Usage**
+
+```csharp
+using NoteSpace.Core;
+using NoteSpace.Rendering.Skia;
+using SkiaSharp;
+
+var page = SampleWorkspace.Create().Notebooks[0].Sections[0].Pages[0];
+using var renderer = new PageRenderer();                  // dispose to release native caches
+File.WriteAllBytes("page.png", renderer.ExportPng(page, scale: 2));
+
+using var surface = SKSurface.Create(new SKImageInfo(1024, 768));
+renderer.Render(surface.Canvas, page, 1024, 768, new RenderOptions { Zoom = 1.25f, ContentRevision = 1 });
+Console.WriteLine($"{renderer.Statistics.BlocksDrawn} blocks drawn");
+```
+
+### NoteSpace.Controls
+
+Reusable Uno Platform notebook UI: the interactive `NoteSurface` (text editing, move/resize grips, ink and shapes, tables), a Skia `NoteCanvas`, `RibbonControl`, `NotebookNavigator`, `PageListControl` with drag/drop, search options/results, the table editor, backstage, status bar, light/dark `OfficeTheme` and original icons. Depends on `NoteSpace.Editor` and `NoteSpace.Rendering.Skia`; requires Uno Platform.
+
+```bash
+dotnet add package NoteSpace.Controls
+```
+
+**Key types** (namespace `NoteSpace.Controls`)
+
+- `NoteSurface` – `Session`, `Tool`, `PenColor`, `FormatSelection`, `ApplyTableCommand`, `RevealSearchResult`, `Error`.
+- `RibbonControl` – `Configure(tabs, theme, collapsed)` with `RibbonTab`/`RibbonGroup`/`RibbonCommand`, `CommandInvoked`.
+- `NotebookNavigator` / `PageListControl` – `Bind(...)` to a workspace or section, selection and command events.
+- `SearchOptionsControl`, `SearchResultsControl`, `NoteTableEditor`, `BackstageControl`, `NoteStatusBar`.
+- `OfficeTheme` – `Light`/`Dark` palettes and brush helpers.
+
+**Usage**
+
+```csharp
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using NoteSpace.Controls;
 using NoteSpace.Core;
 using NoteSpace.Editor;
 
 var session = new EditorSession(SampleWorkspace.Create());
-var editor = new NoteSurface { Session = session };
-window.Content = editor;
-// Subscribe to session.Changed for your host's persistence and command UI.
-// Dispose the surface when its host is permanently closed.
+var surface = new NoteSurface { Session = session };
+surface.Error += (_, message) => Console.WriteLine(message);
 
-var query = new NoteSearchQuery("draft") {
-    Scope = NoteSearchScope.Page,
-    ScopeId = session.SelectedPage!.Id,
-    WholeWord = true
-};
-var hits = session.Search(query).ToList();
-var result = session.ReplaceAll(query, "reviewed");
+var ribbon = new RibbonControl();
+ribbon.Configure([new RibbonTab("Draw", [new RibbonGroup("Tools", [new RibbonCommand("pen", "Pen", "pen"), new RibbonCommand("select", "Select", "page")])])], OfficeTheme.Light, collapsed: false);
+ribbon.CommandInvoked += (_, id) => surface.Tool = id == "pen" ? DrawingTool.Pen : DrawingTool.Select;
+
+var root = new Grid { RowDefinitions = { new RowDefinition { Height = GridLength.Auto }, new RowDefinition() } };
+Grid.SetRow(surface, 1);
+root.Children.Add(ribbon); root.Children.Add(surface);
+window.Content = root;
+window.Closed += (_, _) => surface.Dispose();              // subscribe to session.Changed for persistence
 ```
-
-`SearchHit.Start/Length` use UTF-16 offsets and `Cell` identifies table matches. `SearchOptionsControl` and `NoteSurface.RevealSearchResult` are reusable separately. `PageOutline`, `NotebookGroups`, `NoteTable`, `LiteralTextSearch` and `PageContentIndex` are usable without Uno. A headless rendering host can call `new PageRenderer().ExportPng(page)` and must dispose its renderer and include the appropriate Skia native-assets package.
-
-**Editing contract:** the session is single-writer. A successful `EditPage` replaces that page DTO; keep IDs and resolve current objects after edits. Its callback must mutate only the supplied detached page. Use `Execute` for cross-page/organization operations. Hosts deliberately changing collections outside transactions must invalidate lookup projections; such changes do not acquire undo or autosave notifications.
 
 ## Performance and resource ownership
 
