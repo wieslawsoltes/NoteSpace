@@ -72,6 +72,20 @@ dotnet publish src/NoteSpace.App -c Release -f net10.0-browserwasm \
 
 Serve the directory containing the generated `index.html`. GitHub Pages uses `/NoteSpace/`; override `WasmShellWebAppBasePath` for another hosting path. The workflow stages output in `artifacts/site`, installs `tests/browser` dependencies and runs `node tests/browser/smoke.mjs` against the real compiled application.
 
+## Download
+
+Every [release](https://github.com/wieslawsoltes/NoteSpace/releases/latest) ships a self-contained, single-file desktop app — no .NET install needed:
+
+| OS | x64 | Arm64 |
+| --- | --- | --- |
+| Windows | `NoteSpace-<version>-win-x64.zip` | `NoteSpace-<version>-win-arm64.zip` |
+| macOS | `NoteSpace-<version>-osx-x64.tar.gz` | `NoteSpace-<version>-osx-arm64.tar.gz` |
+| Linux | `NoteSpace-<version>-linux-x64.tar.gz` | `NoteSpace-<version>-linux-arm64.tar.gz` |
+
+Extract and run `NoteSpace` (`NoteSpace.exe` on Windows). Builds are not code-signed yet: on macOS clear the quarantine flag with `xattr -d com.apple.quarantine NoteSpace`; on Windows choose **More info → Run anyway** in SmartScreen. Verify downloads against `SHA256SUMS`.
+
+The libraries below are published to [NuGet.org](https://www.nuget.org/packages?q=NoteSpace), e.g. `dotnet add package NoteSpace.Core`.
+
 ## Reusable libraries
 
 No library references the app. Each package can be built independently; the app supplies storage/file/clipboard platform adapters and composes the controls.
@@ -137,7 +151,7 @@ Validation covers schema, global identities/references, finite geometry, ranges 
 
 **Build, test and deploy** runs on pull requests, `main` pushes and manual dispatch. It runs portable/rendering specifications and paired benchmarks, publishes WebAssembly, drives real-input Chromium workflows, builds desktop and packs all five libraries. Only successful main builds deploy GitHub Pages. QA artifacts include screenshots, input diagnostics limited to test fixtures, logs and benchmarks. Independent browser-suite failures are collected without disabling their assertions.
 
-**Release** runs for `v*` tags or a supplied manual version. It validates the version, runs portable/rendering/browser gates, builds desktop/browser output, packs versioned libraries and emits `SHA256SUMS`. Tags attach assets to a GitHub Release. It does **not** publish to NuGet.org. Headless Chromium uses software rendering; mobile startup checks do not establish physical stylus/GPU, screen-reader or complete touch qualification.
+**Release** runs for `v*` tags or a supplied manual version. It validates the version, runs portable/rendering/browser gates, publishes self-contained single-file desktop executables for Windows, macOS and Linux (x64 and arm64), builds the browser output, packs versioned libraries with symbols and emits `SHA256SUMS`. Tags attach all assets to a GitHub Release and publish the packages to NuGet.org with [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) (OIDC, no stored API key) from the protected `nuget` environment. Manual runs are dry runs: they build and upload every asset as workflow artifacts but publish nothing. Headless Chromium uses software rendering; mobile startup checks do not establish physical stylus/GPU, screen-reader or complete touch qualification.
 
 ## Remaining boundaries
 

@@ -5,17 +5,99 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Package version (for example 0.1.0)
+        description: Version for a dry run (tags publish; manual runs only build and upload artifacts)
         required: true
         default: '0.1.0'
 permissions:
   contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  APP_NAME: NoteSpace
+  APP_PROJECT: src/NoteSpace.App
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        name: Resolve release version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        shell: bash
+        run: |
+          VERSION="$INPUT_VERSION"
+          if [ "$REF_TYPE" = tag ]; then VERSION="${REF_NAME#v}"; fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version '$VERSION'" >&2; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop (${{ matrix.rid }})
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      RID: ${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish self-contained single-file executable
+        shell: bash
+        run: |
+          dotnet publish "$APP_PROJECT" -c Release -f net10.0-desktop -r "$RID" --self-contained true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true \
+            -p:DebugType=none -p:DebugSymbols=false -p:Version="$VERSION" \
+            -o "artifacts/desktop/$RID"
+      - name: Package executable
+        shell: bash
+        run: |
+          OUT="artifacts/desktop/$RID"
+          find "$OUT" -name '*.pdb' -delete
+          mkdir -p artifacts/dist
+          BASE="$APP_NAME-$VERSION-$RID"
+          if [[ "$RID" == win-* ]]; then
+            mv "$OUT/$APP_NAME.App.exe" "$OUT/$APP_NAME.exe"
+            test "$(find "$OUT" -type f | wc -l)" -eq 1
+            (cd "$OUT" && zip -q "$GITHUB_WORKSPACE/artifacts/dist/$BASE.zip" "$APP_NAME.exe")
+          else
+            mv "$OUT/$APP_NAME.App" "$OUT/$APP_NAME"
+            chmod +x "$OUT/$APP_NAME"
+            test "$(find "$OUT" -type f | wc -l)" -eq 1
+            tar -C "$OUT" -czf "artifacts/dist/$BASE.tar.gz" "$APP_NAME"
+          fi
+          ls -la artifacts/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.rid }}
+          path: artifacts/dist/*
+          if-no-files-found: error
+
   release:
+    needs: [version, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,19 +108,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Validate release version
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
-          REF_NAME: ${{ github.ref_name }}
-          REF_TYPE: ${{ github.ref_type }}
-        shell: bash
-        run: |
-          VERSION="$INPUT_VERSION"
-          if [ "$REF_TYPE" = tag ]; then VERSION="${REF_NAME#v}"; fi
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo 'Invalid package version'; exit 1
-          fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Run portable and rendering specifications
         shell: bash
         run: |
@@ -60,19 +129,23 @@ jobs:
           (cd tests/browser && npx playwright install --with-deps chromium)
           node --test tests/browser/host-keyboard.test.mjs
           node tests/browser/smoke.mjs
-      - name: Build desktop and package libraries
+      - name: Pack reusable libraries
         run: |
-          dotnet build src/NoteSpace.App -c Release -f net10.0-desktop -p:Version="$VERSION"
           for name in Core Editor Storage Rendering.Skia Controls; do
             dotnet pack "src/NoteSpace.$name/NoteSpace.$name.csproj" -c Release -o artifacts/packages -p:Version="$VERSION"
           done
           (cd artifacts/site && zip -qr "../NoteSpace-browser-$VERSION.zip" .)
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: artifacts/dist
+          merge-multiple: true
       - name: Generate release checksums
         shell: bash
         run: |
-          for file in artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip; do
-            (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
-          done > artifacts/SHA256SUMS
+          cp artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip artifacts/dist/
+          (cd artifacts/dist && sha256sum * > SHA256SUMS)
+          cat artifacts/dist/SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -82,18 +155,56 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: notespace-release
+          path: artifacts/dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
           path: |
             artifacts/packages/*.nupkg
-            artifacts/NoteSpace-browser-*.zip
-            artifacts/SHA256SUMS
+            artifacts/packages/*.snupkg
+          if-no-files-found: error
       - name: Publish GitHub release for version tag
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          PRE=()
+          case "$VERSION" in *-*) PRE=(--prerelease);; esac
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip artifacts/SHA256SUMS --clobber
+            gh release upload "$TAG" artifacts/dist/* --clobber
           else
-            gh release create "$TAG" artifacts/packages/*.nupkg artifacts/NoteSpace-browser-*.zip artifacts/SHA256SUMS --verify-tag --title "NoteSpace $VERSION" --generate-notes
+            gh release create "$TAG" artifacts/dist/* --verify-tag --title "NoteSpace $VERSION" --generate-notes "${PRE[@]}"
           fi
+
+  nuget:
+    name: Publish to NuGet.org (Trusted Publishing)
+    needs: [version, release]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: nuget
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: packages
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check NuGet user
+        env:
+          NUGET_USER: ${{ vars.NUGET_USER || secrets.NUGET_USER }}
+        run: test -n "$NUGET_USER" || { echo 'Set the NUGET_USER variable (your nuget.org profile name) for this repository or its nuget environment.' >&2; exit 1; }
+      - name: NuGet login (OIDC → short-lived API key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER || secrets.NUGET_USER }}
+      - name: Push packages
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "packages/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
