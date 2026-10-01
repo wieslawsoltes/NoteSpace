@@ -29,7 +29,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     private readonly DispatcherTimer saveTimer = new() { Interval = TimeSpan.FromMilliseconds(650) };
     private string? storageToken, sectionId;
     private long changes, savedChanges;
-    private bool ready, initializing, saving, saveBlocked, searchOpen, focusMode, navigationOpen = true, recentSort, disposed, compactLayout;
+    private bool ready, initializing, saving, saveBlocked, searchOpen, focusMode, navigationOpen = true, disposed, compactLayout;
     private string saveStatus = "Opening notebook…";
     private OfficeTheme theme = OfficeTheme.Light;
     private NotePage? CurrentPage => session.SelectedPage;
@@ -72,6 +72,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         status.FocusRequested += (_, _) => Invoke("full-page");
         backstage.CommandInvoked += (_, command) => Invoke(command);
         ConfigureSearch();
+        ConfigureNavigation();
         search.QueryBox.TextChanged += (_, _) => ScheduleSearch();
         search.ResultSelected += (_, hit) => NavigateSearchResult(hit);
         topSearch.TextChanged += (_, _) => { searchOpen = topSearch.Text.Length > 0; search.QueryBox.Text = topSearch.Text; ApplyLayout(); ScheduleSearch(); };
@@ -93,7 +94,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         AddShortcut(VirtualKey.N, VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu, "new-page");
         AddShortcut(VirtualKey.N, VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu | VirtualKeyModifiers.Shift, "new-subpage");
         KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape) { backstage.Visibility = Visibility.Collapsed; searchOpen = false; ApplyLayout(); } };
-        SizeChanged += (_, _) => ApplyLayout();
+        SizeChanged += (_, _) => { ApplyLayout(); Report(); };
         Loaded += async (_, _) => { if (!ready && !initializing) await InitializeAsync(); };
         ApplyTheme();
     }
@@ -119,7 +120,9 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
                 surface.Session = session; session.Changed += OnDocumentChanged; storageToken = loaded.Token;
             }
             ready = true; saveStatus = "Saved on this device";
+            navigationHistory.Clear(); displayedPageId = null;
             ApplyTheme(); surface.SetZoom(session.Document.Settings.Zoom);
+            RememberViewport();
         }
         finally { initializing = false; }
         if (loaded is null) { MarkDirty(); await SaveAsync(); }
@@ -128,8 +131,9 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     private void OnDocumentChanged(object? sender, DocumentChange change)
     {
         MarkDirty();
-        if (change.StructureChanged) BindNavigation();
-        UpdateStatus(); ScheduleSearch(); Report();
+        if (change.StructureChanged) { BindNavigation(); ApplyLayout(); }
+        else RefreshPagePresentation();
+        UpdateNavigationButtons(); UpdateStatus(); ScheduleSearch(); Report();
     }
     private void MarkDirty()
     {
@@ -160,18 +164,24 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
         }
         finally { saving = false; UpdateStatus(); Report(); }
     }
-    private void Navigate(string id, string? blockId = null)
+    private void Navigate(string id, string? blockId = null, PageViewport? restore = null, bool historyMove = false)
     {
+        surface.EndEditing(); if (surface.HasPendingText || session.FindPage(id) is null) return;
+        RememberViewport();
+        var previousSection = CurrentSection?.Id;
         surface.NavigateToPage(id, blockId);
         if (surface.HasPendingText) return;
+        displayedPageId = id;
+        if (restore.HasValue) surface.SetViewport(restore.Value);
+        if (!historyMove) navigationHistory.Record(new(id, surface.Viewport));
         sectionId = session.Pages.FirstOrDefault(x => x.Page.Id == id).Section?.Id;
-        if (compactLayout) navigationOpen = false;
-        BindNavigation(); notebooks.RevealSelection(); ApplyLayout(); MarkDirty();
+        if (compactLayout) { navigationOpen = false; searchOpen = false; }
+        BindNavigation(previousSection == sectionId); ApplyLayout(); MarkDirty(); UpdateNavigationButtons();
     }
     private void SelectSection(string id)
     {
         surface.EndEditing(); if (surface.HasPendingText) return;
-        sectionId = id; var section = session.FindSection(id); if (section is null) return;
+        var section = session.FindSection(id); if (section is null) return;
         var page = section.Pages.FirstOrDefault() ?? session.AddPage(id); Navigate(page.Id);
     }
     private async void Invoke(string command, string? entityId = null)

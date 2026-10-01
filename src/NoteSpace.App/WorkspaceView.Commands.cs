@@ -11,6 +11,7 @@ public sealed partial class WorkspaceView
     private async Task ExecuteCommandAsync(string command, string? entityId)
     {
         var pageId = session.FindPage(entityId)?.Id ?? CurrentPage?.Id;
+        if (ExecuteNavigationCommand(command)) return;
         switch (command)
         {
             case "focus-pages": surface.EndEditing(); focusMode = false; navigationOpen = true; ApplyLayout(); pages.FocusSelectedPage(); return;
@@ -126,7 +127,7 @@ public sealed partial class WorkspaceView
             case "save-version": if (pageId is not null) { surface.FlushPendingText(); session.SaveVersion(pageId); saveStatus = "Page version saved"; } return;
             case "versions": await VersionsAsync(pageId); return;
             case "trash": await RecycleBinAsync(); return;
-            case "recent": recentSort = !recentSort; BindNavigation(); return;
+            case "recent": SetPageSort(session.Document.Settings.Navigation.PageSort == PageSortMode.ModifiedNewest ? PageSortMode.Manual : PageSortMode.ModifiedNewest); return;
             case "word-count":
                 var text = string.Join(" ", CurrentPage?.Blocks.Select(b => b.Text + " " + string.Join(" ", b.Cells.SelectMany(r => r))) ?? []);
                 await MessageAsync("Page statistics", $"{Regex.Matches(text, @"\S+").Count:N0} words\n{text.Length:N0} characters\n{CurrentPage?.Blocks.Count ?? 0} note containers\n{CurrentPage?.Ink.Count ?? 0} ink strokes and shapes"); return;
@@ -143,7 +144,7 @@ public sealed partial class WorkspaceView
             case "zoom-reset": surface.SetZoom(1); return;
             case "fit-width": surface.FitWidth(); return;
             case "full-page": focusMode = !focusMode; ApplyLayout(); return;
-            case "navigation": navigationOpen = !navigationOpen; ApplyLayout(); return;
+            case "navigation": ToggleNavigationPane(); return;
             case "horizontal-tabs": session.Document.Settings.HorizontalTabs = !session.Document.Settings.HorizontalTabs; MarkDirty(); ApplyLayout(); return;
             case "dark-mode": session.Document.Settings.DarkMode = !session.Document.Settings.DarkMode; MarkDirty(); ApplyTheme(); return;
             case "collapse-ribbon": session.Document.Settings.RibbonCollapsed = !session.Document.Settings.RibbonCollapsed; MarkDirty(); ApplyTheme(); return;

@@ -36,6 +36,12 @@ For tables, double-click a cell and type. Tab/Shift+Tab move between cells; Ente
 
 Text notes use live Skia-rendered mixed formatting with shared caret and selection geometry. Character commands affect the selected range; at a caret they set the style for future typing without changing existing text. Ribbon Copy/Paste preserves selected rich fragments within the session, or transfers note containers outside text editing. Native clipboard shortcuts transfer plain text. The **Layout** tab adds superscript/subscript, format copying, indentation, spacing, tab intervals, and container size/position/order. Paragraph settings apply to the whole container. See [live editing and layout](docs/wysiwyg.md) for keyboard behavior, reusable APIs and remaining limitations.
 
+### Navigation and page views
+
+Use the quick-access **Back / Forward** buttons or **Alt+Left / Alt+Right** to revisit pages with their scroll position and zoom. **Ctrl+Page Up / Page Down** moves through the visible page list. Browsing history is independent of document undo, skips deleted pages and resets on reload/import.
+
+The page-list **Order** menu offers manual order, titles A–Z/Z–A, modified-newest and created-newest sorting, plus optional text previews and dates. Sorted views keep subpages with their parents and never rewrite the saved manual order. Drag the notebook/page pane's right edge or the search pane's left edge to resize; Escape cancels, Home/double-click resets, and View → Reset pane widths restores all defaults. Widths and page-view options are saved in backups. Narrow windows preserve writing space, and phone-width navigation/search uses the full body. See [organization](docs/organization.md) for contracts and limits.
+
 ### Search and replace
 
 `Ctrl+F` opens the search pane. Choose all notebooks, this notebook, this section or this page; toggle case and whole-word matching; or filter tags and open/completed to-dos. Empty to-do queries list matching tasks. Results include their location, reveal collapsed navigation ancestors and select the matched text or table cell. The pane debounces typing for 180 ms and displays up to 200 results.

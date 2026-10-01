@@ -36,7 +36,14 @@ public sealed partial class NoteSurface : Grid, IDisposable
     public DrawingTool Tool { get; set; } = DrawingTool.Select;
     public uint PenColor { get; set; } = 0xFF673AB7;
     public float PenWidth { get; set; } = 3;
+    public bool IsTextEditing => editor is not null;
     public float Zoom => canvas.Options.Zoom;
+    public PageViewport Viewport => new(canvas.Options.OffsetX, canvas.Options.OffsetY, Zoom);
+    public void SetViewport(PageViewport viewport)
+    {
+        viewport.Validate(); canvas.Options.OffsetX = viewport.OffsetX; canvas.Options.OffsetY = viewport.OffsetY;
+        canvas.Options.Zoom = viewport.Zoom; Refresh(); ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
     public bool Dark { get => canvas.Options.Dark; set { canvas.Options.Dark = value; Refresh(); } }
     public bool HasPendingText => pendingText || richDraft is not null && richDraft.Version != committedRichVersion || editor is not null && editor.Text != committedText;
     public PageRenderer Renderer => canvas.Renderer;
@@ -56,6 +63,7 @@ public sealed partial class NoteSurface : Grid, IDisposable
         Background = OfficeTheme.Brush(0xFFFFFFFF);
         Children.Add(canvas); Children.Add(overlay);
         ConfigureInput();
+        ConfigureSelectionToolbar();
         caretTimer.Tick += (_, _) => {
             if (richVisual is null || editor?.FocusState == FocusState.Unfocused) { caretTimer.Stop(); return; }
             richVisual.CaretVisible = !richVisual.CaretVisible; canvas.Invalidate();
@@ -74,7 +82,7 @@ public sealed partial class NoteSurface : Grid, IDisposable
     {
         if (disposed) return;
         canvas.Page = Page; canvas.Options.ContentRevision = session?.Document.Revision;
-        canvas.Options.SelectedId = SelectedBlockId; canvas.Options.SelectedCell = SelectedTableCell; PositionEditor(); canvas.Invalidate();
+        canvas.Options.SelectedId = SelectedBlockId; canvas.Options.SelectedCell = SelectedTableCell; PositionEditor(); UpdateSelectionToolbar(); canvas.Invalidate();
     }
     public void NavigateToPage(string pageId, string? blockId = null)
     {

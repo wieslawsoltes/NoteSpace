@@ -12,9 +12,17 @@ public sealed class SearchResultsControl : UserControl
     public TextBox QueryBox { get; } = new() { PlaceholderText = "Search all notebooks", Margin = new Thickness(12), FontSize = 14 };
     public SearchOptionsControl Options { get; } = new();
     public event EventHandler<SearchHit>? ResultSelected;
+    public event EventHandler? CloseRequested;
+    private readonly OfficeButton close;
+    private OfficeTheme? closeTheme;
     public SearchResultsControl()
     {
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); root.RowDefinitions.Add(new RowDefinition()); var header = new StackPanel(); header.Children.Add(QueryBox);
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); root.RowDefinitions.Add(new RowDefinition()); var header = new StackPanel();
+        var queryRow = new Grid(); queryRow.ColumnDefinitions.Add(new ColumnDefinition()); queryRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        QueryBox.Margin = new Thickness(12, 12, 4, 12); queryRow.Children.Add(QueryBox);
+        close = new OfficeButton("", "close", () => CloseRequested?.Invoke(this, EventArgs.Empty), "Close search") { Width = 30, Height = 30, Margin = new Thickness(0, 12, 8, 12) };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(close, "close-search");
+        Grid.SetColumn(close, 1); queryRow.Children.Add(close); header.Children.Add(queryRow);
         Options.Margin = new Thickness(12, 0, 12, 8); header.Children.Add(Options); root.Children.Add(header);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(QueryBox, "notebook-search");
         var scroll = new ScrollViewer { Content = results }; Grid.SetRow(scroll, 1); root.Children.Add(scroll); Content = root;
@@ -22,6 +30,11 @@ public sealed class SearchResultsControl : UserControl
     public void Bind(IEnumerable<SearchHit> hits, OfficeTheme theme)
     {
         Background = OfficeTheme.Brush(theme.Panel); results.Children.Clear();
+        if (closeTheme != theme)
+        {
+            closeTheme = theme; close.Theme = theme;
+            close.Content = new NoteIcon { Glyph = "close", Width = 18, Height = 18, InkColor = theme.Text };
+        }
         var all = hits.Take(201).ToList(); results.Children.Add(theme.Label(all.Count > 200 ? "200+ results" : $"{all.Count} results", 12, false, theme.Muted));
         foreach (var hit in all.Take(200))
         {

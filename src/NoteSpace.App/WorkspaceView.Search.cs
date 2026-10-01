@@ -27,6 +27,11 @@ public sealed partial class WorkspaceView
         operationNotice.Dismissed += (_, _) => pages.FocusSelectedPage();
         searchTimer.Tick += (_, _) => { searchTimer.Stop(); UpdateSearch(); };
         search.Options.Changed += (_, _) => ScheduleSearch();
+        search.CloseRequested += (_, _) => {
+            searchOpen = false; searchTimer.Stop(); ApplyLayout();
+            if (surface.IsTextEditing) surface.FocusTextEditor(); else pages.FocusSelectedPage();
+            Report();
+        };
     }
     private void ScheduleSearch()
     {

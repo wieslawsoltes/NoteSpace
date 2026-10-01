@@ -36,6 +36,8 @@ public sealed class NoteIcon : SKCanvasElement
         ["attachment"] = "M8 15L16 7Q18 5 20 7Q22 9 20 11L10 21Q7 24 3 20Q0 17 3 14L15 2Q18 -1 22 3",
         ["settings"] = "M12 3V6M12 18V21M3 12H6M18 12H21M5 5L7 7M17 17L19 19M5 19L7 17M17 7L19 5M18 12A6 6 0 1 1 6 12A6 6 0 1 1 18 12",
         ["grip"] = "M8 5H9M15 5H16M8 12H9M15 12H16M8 19H9M15 19H16",
+        ["back"] = "M14 5L7 12L14 19M7 12H22",
+        ["forward"] = "M10 5L17 12L10 19M17 12H2",
         ["chevron-right"] = "M9 7L14 12L9 17",
         ["chevron"] = "M7 9L12 14L17 9",
         ["close"] = "M5 5L19 19M19 5L5 19",
