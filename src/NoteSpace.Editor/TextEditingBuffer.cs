@@ -9,6 +9,8 @@ namespace NoteSpace.Editor;
 public sealed class TextEditingBuffer
 {
     private int[]? boundaries;
+    private IReadOnlyList<TextRun>? attributeRuns;
+    private long attributeVersion = -1;
     private TextFormat typingFormat;
     private string? typingLink;
     public NoteBlock Block { get; }
@@ -93,8 +95,25 @@ public sealed class TextEditingBuffer
         typingFormat = next;
         if (link is not null) typingLink = link.Length == 0 ? null : link;
     }
-    public bool AllHave(Func<TextFormat, bool> predicate) => SelectionLength == 0
-        ? predicate(typingFormat) : RichText.AllHave(Block, SelectionStart, SelectionLength, predicate);
+    public bool AllHave(Func<TextFormat, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        if (SelectionLength == 0) return predicate(typingFormat);
+        // Ribbon state asks several attribute questions for each selection change.
+        // Resolve overlapping marks once per content version, not once per button.
+        if (attributeVersion != Version || attributeRuns is null)
+        {
+            attributeRuns = RichText.GetRuns(Block); attributeVersion = Version;
+        }
+        var end = SelectionStart + SelectionLength;
+        for (var i = 0; i < attributeRuns.Count; i++)
+        {
+            var run = attributeRuns[i];
+            if (run.Start >= end) break;
+            if (run.End > SelectionStart && !predicate(run.Format)) return false;
+        }
+        return true;
+    }
     public void FormatContainer(Action<TextFormat> apply)
     {
         var probe = RichText.CloneStyle(Block.Format); apply(probe); ValidateFormat(probe);
@@ -106,17 +125,29 @@ public sealed class TextEditingBuffer
     }
     public void ReplaceSelection(string text)
     {
+        ArgumentNullException.ThrowIfNull(text);
         var start = SelectionStart; var length = SelectionLength;
         if (length == 0 && text.Length == 0) return;
         RichText.ReplaceRange(Block, start, length, text, typingFormat, typingLink);
         boundaries = null; Version++; Select(start + text.Length, start + text.Length, true);
     }
-    /// <summary>Reconcile native text/IME/clipboard input by its minimal changed span.
+    /// <summary>Reconcile native text/IME/clipboard input using selection before minimal difference.
     /// Content is assigned only after range/size validation succeeds.</summary>
     public void AcceptText(string value)
     {
         ArgumentNullException.ThrowIfNull(value);
         var old = Block.Text; if (old == value) return;
+        // Prefer the actual selected range. A minimal string diff is ambiguous in
+        // repeated text (inserting "a" into "aaaa" otherwise formats the final a).
+        var start = SelectionStart; var length = SelectionLength;
+        var insertedLength = value.Length - (old.Length - length);
+        if (insertedLength >= 0 && start + insertedLength <= value.Length
+            && old.AsSpan(0, start).SequenceEqual(value.AsSpan(0, start))
+            && old.AsSpan(start + length).SequenceEqual(value.AsSpan(start + insertedLength)))
+        {
+            RichText.ReplaceRange(Block, start, length, value.Substring(start, insertedLength), typingFormat, typingLink);
+            boundaries = null; Version++; Select(start + insertedLength, start + insertedLength, true); return;
+        }
         var prefix = 0;
         while (prefix < old.Length && prefix < value.Length && old[prefix] == value[prefix]) prefix++;
         if (SplitsPair(old, prefix) || SplitsPair(value, prefix)) prefix--;

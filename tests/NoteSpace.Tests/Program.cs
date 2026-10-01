@@ -49,6 +49,7 @@ Test("A rejected edit does not discard redo history", () => {
     Assert(s.CanRedo); s.Redo(); Assert(s.SelectedPage!.Title == "Retained redo");
 });
 WysiwygTests.Run(Test);
+NativeDraftTests.Run(Test);
 EditingRegressionTests.Run(Test);
 PerformanceAndTableTests.Run(Test);
 OrganizationTests.Run(Test);

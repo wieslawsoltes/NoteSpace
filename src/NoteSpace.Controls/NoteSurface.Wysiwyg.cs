@@ -18,6 +18,8 @@ public sealed partial class NoteSurface
     private bool syncingRichSelection;
     private float? preferredCaretX;
     private int pendingRichKeys;
+    private readonly Queue<Action> richKeyActions = new();
+    private bool drainingRichKeys;
     private TextFormat? copiedFormat;
     private NoteBlock? copiedText;
     private readonly DispatcherTimer caretTimer = new() { Interval = TimeSpan.FromMilliseconds(530) };
@@ -42,7 +44,7 @@ public sealed partial class NoteSurface
     }
     private void StopRichEditing()
     {
-        pendingRichKeys = 0;
+        richKeyActions.Clear(); pendingRichKeys = 0;
         caretTimer.Stop(); richDraft = null; richVisual = null; canvas.Options.TextEdit = null; preferredCaretX = null;
     }
     private void ConfigureRichInput(TextBox box)
@@ -58,7 +60,7 @@ public sealed partial class NoteSurface
         box.MinWidth = 1; box.MinHeight = 1; box.IsTabStop = true;
         box.Foreground = OfficeTheme.Brush(0); box.Background = OfficeTheme.Brush(0);
         box.SelectionChanged += (_, _) => {
-            if (editor != box || richDraft is null || syncingRichSelection || switchingCell || pendingRichKeys > 0) return;
+            if (editor != box || richDraft is null || syncingRichSelection || switchingCell || pendingRichKeys > 0 || drainingRichKeys) return;
             var start = box.SelectionStart; var end = start + box.SelectionLength;
             var same = start == richDraft.SelectionStart && box.SelectionLength == richDraft.SelectionLength;
             if (!same) richDraft.Select(start, end);
@@ -123,6 +125,7 @@ public sealed partial class NoteSurface
     }
     private void FlushRichDraft()
     {
+        DrainRichKeys();
         typingTimer.Stop();
         if (richDraft is null || editor is null || session is null || editingPageId is null) return;
         try
@@ -150,8 +153,27 @@ public sealed partial class NoteSurface
         StartRichEditing(block); richDraft!.Select(anchor, caret); committedText = block.Text;
         SyncRichInput();
     }
+    // Native DOM input can deliver the next key/accelerator before a dispatcher
+    // callback runs. Drain earlier editing keys before accepting another command.
+    // Dispatcher callbacks only drain this queue; they cannot replay an old action.
+    private void DrainRichKeys()
+    {
+        if (drainingRichKeys) return;
+        drainingRichKeys = true;
+        try
+        {
+            while (richKeyActions.TryDequeue(out var action))
+            {
+                try { action(); }
+                catch (Exception error) { pendingText = true; Error?.Invoke(this, error.Message); }
+                finally { pendingRichKeys = richKeyActions.Count; }
+            }
+        }
+        finally { drainingRichKeys = false; }
+    }
     private bool HandleRichKey(KeyRoutedEventArgs e)
     {
+        DrainRichKeys();
         if (richDraft is null || editor is null) return false;
         var shiftDown = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
         var ctrlDown = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
@@ -160,9 +182,8 @@ public sealed partial class NoteSurface
         // Run after native dispatch. NoteInputBox suppresses default text writes for
         // these host-owned keys before this queued action updates the input buffer.
         pendingRichKeys++;
-        DispatcherQueue.TryEnqueue(() => {
+        richKeyActions.Enqueue(() => {
             if (richDraft != draft || editor != box) return;
-            pendingRichKeys = Math.Max(0, pendingRichKeys - 1);
             if (key is VirtualKey.Back or VirtualKey.Delete) { draft.Delete(key == VirtualKey.Back, ctrlDown); preferredCaretX = null; SyncRichInput(); return; }
             if (key is VirtualKey.Tab or VirtualKey.Enter) { draft.ReplaceSelection(key == VirtualKey.Tab ? "\t" : "\n"); preferredCaretX = null; SyncRichInput(); return; }
             var target = draft.Caret;
@@ -185,9 +206,10 @@ public sealed partial class NoteSurface
             }
             SetRichSelection(shiftDown ? draft.Anchor : target, target);
         });
+        DispatcherQueue.TryEnqueue(DrainRichKeys);
         return true;
     }
-    public void CopyTextFormat() { copiedFormat = CurrentTextFormat; SelectionChanged?.Invoke(this, EventArgs.Empty); }
+    public void CopyTextFormat() { FlushPendingText(); copiedFormat = CurrentTextFormat; SelectionChanged?.Invoke(this, EventArgs.Empty); }
     public void PasteTextFormat() { if (copiedFormat is { } format) FormatSelection(target => RichText.CopyStyle(format, target)); }
     public void ClearTextFormatting() => FormatSelection(target => {
         var defaults = new TextFormat { Alignment = target.Alignment, Bullets = target.Bullets, Numbered = target.Numbered };
