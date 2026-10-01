@@ -1,3 +1,4 @@
+import { navigationWorkflows } from './navigation.mjs';
 import { wysiwygWorkflows } from './wysiwyg.mjs';
 import { searchWorkflows } from './search.mjs';
 import { chromium } from 'playwright';
@@ -207,6 +208,7 @@ try {
     const tableTests = await runSuite(() => tableWorkflows({ browser, output }));
     const searchTests = await runSuite(() => searchWorkflows({ browser, output }));
     const wysiwygTests = await runSuite(() => wysiwygWorkflows({ browser, output }));
+    const navigationTests = await runSuite(() => navigationWorkflows({ browser, output }));
     if (suiteErrors.length) throw new AggregateError(suiteErrors, 'Browser integration suites failed');
 
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -216,8 +218,8 @@ try {
     await mobilePage.screenshot({ path: resolve(output, 'mobile.png') });
     await mobile.close();
     assert.deepEqual(errors, [], 'No unhandled browser errors');
-    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot', ...organizationTests, ...tableTests, ...searchTests, ...wysiwygTests] }, null, 2));
-    console.log(`PASS ${18 + organizationTests.length + tableTests.length + searchTests.length + wysiwygTests.length} browser workflows: editing, rich text, ink, organization, history, persistence, conflict, mobile`);
+    await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, tests: ['boot', 'create page', 'edit title', 'edit note', 'autosave', 'reload', 'draw', 'undo', 'redo', 'ink persistence', 'mixed range formatting', 'nested subpages', 'keyboard parent navigation', 'collapse groups', 'collapse persistence', 'keyboard expand navigation', 'atomic storage conflict', 'mobile boot', ...organizationTests, ...tableTests, ...searchTests, ...wysiwygTests, ...navigationTests] }, null, 2));
+    console.log(`PASS ${18 + organizationTests.length + tableTests.length + searchTests.length + wysiwygTests.length + navigationTests.length} browser workflows: editing, rich text, ink, organization, history, persistence, conflict, mobile`);
 } catch (error) {
     await inputCheckpoint('failure-input-trace').catch(() => {});
     await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {});

@@ -17,6 +17,7 @@ public sealed class Workspace
 }
 public sealed class WorkspaceSettings
 {
+    public NavigationPreferences Navigation { get; set; } = new();
     public string? SelectedPageId { get; set; }
     public bool DarkMode { get; set; }
     public bool HorizontalTabs { get; set; }
@@ -160,6 +161,8 @@ public static class DocumentJson
     {
         if (w.SchemaVersion != 1) throw new InvalidDataException($"Unsupported NoteSpace schema {w.SchemaVersion}.");
         if (w.Notebooks is null || w.Trash is null || w.Settings is null || w.Notebooks.Count > 100 || w.Trash.Count > 2000) throw new InvalidDataException("Invalid workspace collections.");
+        if (w.Settings.Navigation is null) throw new InvalidDataException("Missing navigation preferences.");
+        w.Settings.Navigation.Validate();
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var pageCount = 0; var blockCount = 0; long points = 0;
         void Identity(string id) { if (string.IsNullOrWhiteSpace(id) || id.Length > 100 || !ids.Add(id)) throw new InvalidDataException("Missing or duplicate object identity."); }

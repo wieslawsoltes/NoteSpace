@@ -36,7 +36,7 @@ public sealed partial class WorkspaceView
         {
             var imported = DocumentJson.Deserialize(text);
             if (!await ConfirmAsync("Open this notebook backup?", "Replace the current workspace with the selected .notespace backup? Export your current workspace first to keep a separate copy. You can undo the import in this session.", "Open backup")) return;
-            session.Replace(imported); sectionId = null; ApplyTheme(); surface.SetZoom(session.Document.Settings.Zoom); await SaveAsync();
+            session.Replace(imported); navigationHistory.Clear(); displayedPageId = null; sectionId = null; ApplyTheme(); surface.SetZoom(session.Document.Settings.Zoom); await SaveAsync();
         }
         else if (extension is ".md" or ".txt")
         {

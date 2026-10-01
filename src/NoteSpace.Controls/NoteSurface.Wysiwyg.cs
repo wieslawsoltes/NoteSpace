@@ -186,6 +186,8 @@ public sealed partial class NoteSurface
     {
         DrainRichKeys();
         if (richDraft is null || editor is null) return false;
+        // Alt+Left/Right belongs to page history, not visual-line navigation.
+        if ((InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu) & CoreVirtualKeyStates.Down) != 0) return false;
         var shiftDown = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
         var ctrlDown = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
         var key = e.Key; var draft = richDraft; var box = editor;

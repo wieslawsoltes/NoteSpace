@@ -41,6 +41,8 @@ internal static class RibbonDefinitions
             new("Views", [C("full-page", "Full Page", "fullscreen"), C("horizontal-tabs", "Tabs Layout", "folder"), C("dark-mode", "Dark Mode", "color")]),
             new("Page Setup", [C("paper-plain", "Plain", "page", true), C("paper-ruled", "Rule Lines", "ruled", true), C("paper-grid", "Grid Lines", "grid", true), C("paper-dots", "Dot Grid", "grid", true), C("paper-color", "Page Color", "color", true)]),
             new("Zoom", [C("zoom-out", "Zoom Out", "−"), C("zoom-in", "Zoom In", "+"), C("zoom-reset", "100%", "text"), C("fit-width", "Page Width", "fullscreen")]),
+            new("Navigation", [C("page-back", "Back", "back", true), C("page-forward", "Forward", "forward", true), C("reset-pane-widths", "Reset pane widths", "menu", true)]),
+            new("Page List", [C("page-previews", "Page previews", "page", true), C("page-dates", "Page dates", "calendar", true)]),
             new("Window", [C("collapse-ribbon", "Ribbon", "chevron"), C("navigation", "Navigation", "menu")])
         ]),
         new("Table", [
