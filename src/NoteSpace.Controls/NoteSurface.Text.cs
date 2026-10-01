@@ -68,13 +68,13 @@ public sealed partial class NoteSurface
         EndEditing(); if (pendingText) return;
         SelectedBlockId = block.Id; canvas.Options.SelectedId = block.Id;
         editingPageId = Page.Id; editingBlockId = block.Id; editingTitle = false;
-        StartRichEditing(block); CreateEditor(block.Text, block.Format); canvas.Options.EditingId = null; UpdateRichAdorners();
+        StartRichEditing(block); CreateEditor(richDraft!.Block.Text, block.Format); canvas.Options.EditingId = null; UpdateRichAdorners();
         PositionEditor(); canvas.Invalidate(); SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
     private void CreateEditor(string text, TextFormat format)
     {
         var box = new NoteInputBox { Text = text, AcceptsReturn = !editingTitle, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(1), BorderBrush = OfficeTheme.Brush(OfficeTheme.Accent), Background = OfficeTheme.Brush(Dark ? 0xFF252525 : 0xFFFFFFFF), Padding = new Thickness(11, 9, 11, 8), MinWidth = 40, MinHeight = 32, MaxLength = editingTitle ? 500 : editingCell.HasValue ? NoteTable.MaximumCellLength : 2 * 1024 * 1024, IsSpellCheckEnabled = true };
-        editor = box; committedText = text; pendingText = false; ApplyEditorStyle(box, format);
+        editor = box; committedText = box.Text; pendingText = false; ApplyEditorStyle(box, format);
         AutomationProperties.SetName(box, editingTitle ? "Page title" : editingCell is { } cell ? $"Table row {cell.Row + 1}, column {cell.Column + 1}" : "Note text");
         AutomationProperties.SetAutomationId(box, editingTitle ? "page-title-editor" : editingCell.HasValue ? "table-cell-editor" : "note-text-editor");
         // TextChanged can be coalesced by the native/Skia text bridge. Track the

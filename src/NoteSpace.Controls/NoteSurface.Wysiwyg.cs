@@ -24,6 +24,7 @@ public sealed partial class NoteSurface
     private NoteBlock? copiedText;
     private readonly DispatcherTimer caretTimer = new() { Interval = TimeSpan.FromMilliseconds(530) };
     public bool IsRichTextEditing => richDraft is not null;
+    public bool IsRichTextFocused => richDraft is not null && editor is { FocusState: not FocusState.Unfocused };
     public int TextSelectionStart => richDraft?.SelectionStart ?? editor?.SelectionStart ?? 0;
     public int TextSelectionLength => richDraft?.SelectionLength ?? editor?.SelectionLength ?? 0;
     public TextFormat CurrentTextFormat => richDraft?.CurrentFormat ?? RichText.CloneStyle(SelectedBlock?.Format ?? new());
@@ -38,7 +39,9 @@ public sealed partial class NoteSurface
 
     private void StartRichEditing(NoteBlock block)
     {
-        richDraft = new(block); committedRichVersion = 0;
+        richDraft = new(block);
+        richDraft.NormalizeLineEndings();
+        committedRichVersion = richDraft.Version;
         richVisual = new(richDraft.Block); canvas.Options.TextEdit = richVisual;
         preferredCaretX = null;
     }
@@ -70,10 +73,14 @@ public sealed partial class NoteSurface
         box.LostFocus += (_, _) => { caretTimer.Stop(); if (richVisual is not null) { richVisual.CaretVisible = false; canvas.Invalidate(); } };
         caretTimer.Start();
     }
+    // Uno's managed TextBox uses CR while its DOM textarea uses LF. Keep one
+    // canonical rich draft so native normalization cannot flatten intervening runs.
+    private static string NormalizeNativeText(string value) => value.Contains('\r')
+        ? value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n') : value;
     private void RichNativeTextChanged(TextBox box)
     {
         if (richDraft is null || editor != box || switchingCell) return;
-        try { richDraft.AcceptText(box.Text); }
+        try { richDraft.AcceptText(NormalizeNativeText(box.Text)); }
         catch (Exception error) { pendingText = true; Error?.Invoke(this, error.Message); }
         pendingText = box.Text != committedText || richDraft.Version != committedRichVersion;
         preferredCaretX = null; UpdateRichAdorners();
@@ -134,7 +141,7 @@ public sealed partial class NoteSurface
         if (richDraft is null || editor is null || session is null || editingPageId is null) return;
         try
         {
-            richDraft.AcceptText(editor.Text);
+            richDraft.AcceptText(NormalizeNativeText(editor.Text));
             if (richDraft.Version == committedRichVersion) { pendingText = false; return; }
             var version = richDraft.Version; var draft = richDraft;
             updating = true;
@@ -155,7 +162,7 @@ public sealed partial class NoteSurface
         if (block is null || block.Kind is not (BlockKind.Text or BlockKind.Heading or BlockKind.Checklist)) { CancelEditor(); return; }
         var anchor = richDraft.Anchor; var caret = richDraft.Caret;
         StartRichEditing(block); richDraft!.Select(anchor, caret); committedText = block.Text;
-        SyncRichInput();
+        SyncRichInput(); committedText = editor.Text;
     }
     // Native DOM input can deliver the next key/accelerator before a dispatcher
     // callback runs. Drain earlier editing keys before accepting another command.

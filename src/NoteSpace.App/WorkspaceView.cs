@@ -101,6 +101,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     {
         if (initializing) return;
         initializing = true;
+        platform.BindFormatShortcuts(() => HandleNativeFormatShortcut(false), () => HandleNativeFormatShortcut(true));
         StoredWorkspace? loaded = null;
         try { loaded = await platform.Store.LoadAsync(); }
         catch (Exception error)
@@ -199,6 +200,6 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     }
     public void Dispose()
     {
-        if (disposed) return; disposed = true; saveTimer.Stop(); searchTimer.Stop(); session.Changed -= OnDocumentChanged; surface.Dispose();
+        if (disposed) return; disposed = true; platform.ClearFormatShortcuts(); saveTimer.Stop(); searchTimer.Stop(); session.Changed -= OnDocumentChanged; surface.Dispose();
     }
 }

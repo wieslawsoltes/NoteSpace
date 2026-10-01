@@ -158,6 +158,23 @@ public sealed class TextEditingBuffer
         RichText.ReplaceRange(Block, prefix, old.Length - prefix - suffix, inserted, typingFormat, typingLink);
         boundaries = null; Version++; Select(prefix + inserted.Length, prefix + inserted.Length, true);
     }
+    /// <summary>Canonicalize CRLF/CR to LF without flattening styles between breaks.
+    /// Hosts can call this when adapting native editors with a different newline form.</summary>
+    public void NormalizeLineEndings()
+    {
+        var text = Block.Text;
+        if (!text.Contains('\r')) return;
+        int Map(int offset)
+        {
+            var pairs = 0;
+            for (var i = 0; i + 1 < offset; i++) if (text[i] == '\r' && text[i + 1] == '\n') { pairs++; i++; }
+            return offset - pairs;
+        }
+        var anchor = Map(Anchor); var caret = Map(Caret);
+        RichText.ReplaceAll(Block, "\r\n", "\n", StringComparison.Ordinal);
+        RichText.ReplaceAll(Block, "\r", "\n", StringComparison.Ordinal);
+        boundaries = null; Version++; Select(anchor, caret, true);
+    }
     public void Delete(bool backwards, bool word = false)
     {
         if (SelectionLength == 0) Select(Caret, Adjacent(Caret, backwards ? -1 : 1, word), true);

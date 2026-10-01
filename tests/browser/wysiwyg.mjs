@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 export async function wysiwygWorkflows({ browser, output }) {
-    const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+    const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, permissions: ['clipboard-read', 'clipboard-write'] });
     const page = await context.newPage(); const errors = []; const tests = []; let stage = 'boot';
     page.on('pageerror', error => errors.push(error.message));
     const settle = async () => { await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))); await page.waitForTimeout(180); };
@@ -19,7 +19,9 @@ export async function wysiwygWorkflows({ browser, output }) {
         await page.goto('http://127.0.0.1:4173/NoteSpace/', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty, null, { timeout: 150000 }); await settle();
         await page.keyboard.press('Control+Alt+n'); await settle();
+        await wait(() => ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName));
         await page.keyboard.press('Control+a'); await page.keyboard.type('Live rich editing'); await page.keyboard.press('Enter'); await settle();
+        await wait(() => globalThis.noteSpaceState.pageTitle === 'Live rich editing');
         await page.mouse.dblclick(670, 445, { delay: 100 }); await wait(() => globalThis.noteSpaceState.richTextEditing); await settle();
         await page.keyboard.type('Alpha beta'); await settle();
         await wait(() => !globalThis.noteSpaceState.dirty); assert.equal(await text(), 'Alpha beta');
@@ -61,11 +63,21 @@ export async function wysiwygWorkflows({ browser, output }) {
         tests.push('tabs paragraphs and visual-line keyboard navigation');
 
         stage = 'format-painter';
+        const clipboardSentinel = 'Clipboard text must not replace a format-only selection';
+        await page.evaluate(value => navigator.clipboard.writeText(value), clipboardSentinel);
+        const beforeFormatText = await text();
         await page.keyboard.press('Control+Home'); await settle();
         await page.keyboard.press('Shift+ArrowRight'); await settle(); await page.keyboard.press('Control+Shift+c'); await settle();
+        assert.equal(await page.evaluate(() => navigator.clipboard.readText()), clipboardSentinel, 'Copy Format does not write the OS clipboard');
         await page.keyboard.press('Control+End'); await settle();
         for (let i = 0; i < 4; i++) await page.keyboard.press('Shift+ArrowLeft'); await settle();
+        // Make the target different first: a no-op shortcut cannot pass this check.
+        assert.equal((await state()).textBold, true);
+        await page.keyboard.press('Control+b'); await settle();
+        assert.equal((await state()).textBold, false);
         await page.keyboard.press('Control+Shift+v'); await settle(); await wait(() => !globalThis.noteSpaceState.dirty);
+        assert.equal(await text(), beforeFormatText, 'Paste Format must not insert native clipboard text');
+        assert.equal(await page.evaluate(() => navigator.clipboard.readText()), clipboardSentinel);
         b = (await saved()).blocks[0]; assert.equal(styleAt(b, 22).bold, true); tests.push('format copy and paste retains the selected range');
 
         stage = 'pointer-selection';
@@ -112,8 +124,11 @@ export async function wysiwygWorkflows({ browser, output }) {
         await page.keyboard.type('xy'); await page.keyboard.press('Backspace'); await page.keyboard.type('z');
         await page.keyboard.press('Tab'); await page.keyboard.type('q'); await settle();
         assert.equal(await text(), 'aaaaa\nxz\tq');
+        await page.evaluate(() => navigator.clipboard.writeText(' plain'));
+        await page.keyboard.press('Control+v'); await settle();
+        assert.equal(await text(), 'aaaaa\nxz\tq plain', 'Ordinary native paste remains available');
         await page.keyboard.press('Escape'); await settle(); await wait(() => !globalThis.noteSpaceState.dirty);
-        assert.equal((await saved()).blocks[1].text, 'aaaaa\nxz\tq');
+        assert.equal((await saved()).blocks[1].text, 'aaaaa\nxz\tq plain');
         assert.deepEqual((await saved()).blocks[0], committed);
         tests.push('rapid host navigation and native typing retain all text in order');
         assert.deepEqual(errors, []); await writeFile(resolve(output, 'wysiwyg-result.json'), JSON.stringify({ passed: true, tests }, null, 2));

@@ -8,6 +8,12 @@ namespace NoteSpace.App;
 
 public sealed partial class WorkspaceView
 {
+    private bool HandleNativeFormatShortcut(bool paste)
+    {
+        if (!ready || disposed || dialogGate.CurrentCount == 0 || !surface.IsRichTextFocused) return false;
+        Invoke(paste ? "paste-format" : "copy-format");
+        return true;
+    }
     private void UpdateTextRibbon()
     {
         ribbon.SetCommandState("bold", surface.TextHasAttribute(f => f.Bold));

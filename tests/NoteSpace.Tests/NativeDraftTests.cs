@@ -52,6 +52,14 @@ internal static class NativeDraftTests
             for (var i = 0; i < 1000; i++) Check(edit.AllHave(bold));
             Check(GC.GetAllocatedBytesForCurrentThread() - before < 1024);
         });
+        test("Newline normalization preserves styles across separate paragraphs", () => {
+            var note = new NoteBlock { Text = "a\r\nb\rc\n" };
+            RichText.Apply(note, 3, 1, f => f.Bold = true); RichText.Apply(note, 5, 1, f => f.Italic = true);
+            var edit = new TextEditingBuffer(note); edit.Select(6, 3); edit.NormalizeLineEndings();
+            Check(edit.Block.Text == "a\nb\nc\n" && edit.Anchor == 5 && edit.Caret == 2);
+            Check(RichText.At(edit.Block, 2).Bold && RichText.At(edit.Block, 4).Italic && !RichText.At(edit.Block, 0).Bold);
+            var version = edit.Version; edit.NormalizeLineEndings(); Check(edit.Version == version);
+        });
         test("Null replacement and attribute predicates cannot damage a draft", () => {
             var edit = new TextEditingBuffer(new NoteBlock { Text = "abc" });
             Throws<ArgumentNullException>(() => edit.ReplaceSelection(null!));
