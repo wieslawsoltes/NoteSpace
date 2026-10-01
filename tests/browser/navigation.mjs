@@ -108,6 +108,10 @@ export async function navigationWorkflows({ browser, output }) {
         await page.keyboard.press('F6'); await page.keyboard.press('Home'); await settle();
         const rowsBefore = (await state()).pageRowsBuilt;
         const order = await visibleIds(); assert.equal((await state()).pageId, order[0]);
+        await page.keyboard.press('End'); await settle(); assert.equal((await state()).pageId, order.at(-1));
+        await page.keyboard.press('Home'); await settle(); assert.equal((await state()).pageId, order[0]);
+        assert.equal((await state()).pageRowsBuilt, rowsBefore);
+        tests.push('Home and End navigate visible pages without rebuilding rows');
         await page.keyboard.press('Control+PageDown'); await settle(); assert.equal((await state()).pageId, order[1]);
         await page.keyboard.press('Control+PageUp'); await settle(); assert.equal((await state()).pageId, order[0]);
         assert.equal((await state()).pageRowsBuilt, rowsBefore); tests.push('page-only navigation reuses the existing page row controls');
@@ -139,7 +143,7 @@ export async function navigationWorkflows({ browser, output }) {
         console.log(`PASS ${tests.length} navigation UX workflows`); return tests;
     } catch (error) {
         await page.screenshot({ path: resolve(output, 'navigation-failure.png') }).catch(() => {});
-        await writeFile(resolve(output, 'navigation-failure.json'), JSON.stringify({ stage, tests, errors, state: await state().catch(() => null) }, null, 2));
+        await writeFile(resolve(output, 'navigation-failure.json'), JSON.stringify({ stage, tests, errors, state: await state().catch(() => null), focus: await page.evaluate(() => document.activeElement?.outerHTML).catch(() => null) }, null, 2));
         await writeFile(resolve(output, 'navigation-failure-dom.html'), await page.content().catch(() => ''));
         throw error;
     } finally { await context.close(); }

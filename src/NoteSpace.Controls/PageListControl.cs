@@ -40,6 +40,10 @@ public sealed partial class PageListControl : UserControl
             { restoreFocus = true; PageSelected?.Invoke(this, id); }
         };
         list.KeyDown += OnKeyDown;
+        // ListView may consume Home/End while moving only its internal focus.
+        // A page outline must also navigate its selected page. Observe those
+        // boundary keys after native handling without duplicating Up/Down.
+        list.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnBoundaryKeyDown), true);
         Unloaded += (_, _) => CancelDrag();
     }
 
@@ -205,6 +209,17 @@ public sealed partial class PageListControl : UserControl
     {
         restoreFocus = command is "collapse-page" or "expand-page" or "page-up" or "page-down" or "subpage" or "promote-page";
         CommandInvoked?.Invoke(this, new(command, id));
+    }
+
+    private void OnBoundaryKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is not (VirtualKey.Home or VirtualKey.End) || e.KeyStatus.IsMenuKeyDown || list.Items.Count == 0) return;
+        e.Handled = true;
+        var row = (ListViewItem)list.Items[e.Key == VirtualKey.Home ? 0 : list.Items.Count - 1];
+        if (row.Tag is not string id) return;
+        if (id == selectedId) { FocusSelectedPage(); return; }
+        restoreFocus = true;
+        PageSelected?.Invoke(this, id);
     }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
