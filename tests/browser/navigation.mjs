@@ -37,6 +37,18 @@ export async function navigationWorkflows({ browser, output }) {
         await page.waitForFunction(() => globalThis.noteSpaceState?.ready && !noteSpaceState.dirty, null, { timeout: 150000 }); await settle();
         const zulu = await createPage('Zebra view'); const child = await createPage('Nested view', true); const alpha = await createPage('Alpha view');
         await enableAccessibility();
+        stage = 'section-switch';
+        const initialWorkspace = await saved();
+        const currentSectionId = (await state()).sectionId;
+        const otherSection = sections(initialWorkspace).find(s => s.id !== currentSectionId && s.pages.length);
+        await activate('section-' + otherSection.id);
+        assert.equal((await state()).sectionId, otherSection.id);
+        assert.deepEqual(await visibleIds(), otherSection.pages.map(p => p.id));
+        await page.keyboard.press('Alt+ArrowLeft'); await settle();
+        assert.equal((await state()).pageId, alpha);
+        await page.keyboard.press('Alt+ArrowLeft'); await settle();
+        await page.keyboard.press('Alt+ArrowRight'); await settle();
+        tests.push('section switching binds the destination outline and browsing restores it');
         stage = 'history-viewports';
         await activate('tab-View'.toLowerCase()); await activate('command-zoom-in');
         await page.mouse.move(1000, 650); await page.mouse.wheel(0, 720); await settle(); await page.keyboard.press('Control+s'); await settle();

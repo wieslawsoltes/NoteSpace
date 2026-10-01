@@ -11,6 +11,8 @@ public sealed class NavigationPreferences
     public PageSortMode PageSort { get; set; }
     public bool ShowPagePreviews { get; set; }
     public bool ShowPageDates { get; set; }
+    public bool SimplifiedRibbon { get; set; }
+    public bool ShowSelectionToolbar { get; set; } = true;
     public NavigationPreferences Copy() => (NavigationPreferences)MemberwiseClone();
     public void Validate()
     {

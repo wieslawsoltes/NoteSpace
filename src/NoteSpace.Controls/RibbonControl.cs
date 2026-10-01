@@ -34,7 +34,7 @@ public sealed class RibbonGroupControl : UserControl
     }
 }
 
-public sealed class RibbonControl : UserControl
+public sealed partial class RibbonControl : UserControl
 {
     private readonly Grid root = new();
     private readonly StackPanel tabs = new() { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(8, 0, 8, 0) };
@@ -52,6 +52,7 @@ public sealed class RibbonControl : UserControl
     {
         if (commandStates.TryGetValue(id, out var previous) && previous == (selected, enabled)) return;
         commandStates[id] = (selected, enabled);
+        UpdateOverflowState(id, selected, enabled);
         if (commandButtons.TryGetValue(id, out var button)) { button.Selected = selected; button.IsEnabled = enabled; }
     }
     private void RegisterCommand(string id, OfficeButton button)
@@ -66,6 +67,7 @@ public sealed class RibbonControl : UserControl
         root.Children.Add(tabScroll);
         groupScroll = new ScrollViewer { Content = groups, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, HorizontalScrollMode = ScrollMode.Enabled, Height = 104 };
         Grid.SetRow(groupScroll, 1); root.Children.Add(groupScroll); Content = root;
+        InitializeCompactRibbon();
     }
     public void Configure(IReadOnlyList<RibbonTab> tabsDefinition, OfficeTheme theme, bool collapsed)
     {
@@ -84,9 +86,11 @@ public sealed class RibbonControl : UserControl
             AutomationProperties.SetAutomationId(button, "tab-" + tab.Title.ToLowerInvariant()); tabs.Children.Add(button);
         }
         tabs.Children.Add(new OfficeButton(Collapsed ? "⌄" : "⌃", "", () => CommandInvoked?.Invoke(this, "collapse-ribbon"), "Collapse or expand the ribbon", theme: Theme) { Width = 32 });
+        AddRibbonModeButton();
         commandButtons.Clear(); groups.Children.Clear();
         var active = definitions.FirstOrDefault(t => t.Title == ActiveTab);
-        if (active is not null) foreach (var group in active.Groups) groups.Children.Add(new RibbonGroupControl(group, Theme, id => CommandInvoked?.Invoke(this, id), RegisterCommand));
-        groupScroll.Visibility = Collapsed ? Visibility.Collapsed : Visibility.Visible;
+        if (!Simplified && active is not null) foreach (var group in active.Groups) groups.Children.Add(new RibbonGroupControl(group, Theme, id => CommandInvoked?.Invoke(this, id), RegisterCommand));
+        groupScroll.Visibility = Collapsed || Simplified ? Visibility.Collapsed : Visibility.Visible;
+        BuildCompactRibbon(active);
     }
 }

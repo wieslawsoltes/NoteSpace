@@ -181,7 +181,7 @@ public sealed partial class WorkspaceView : UserControl, IDisposable
     private void SelectSection(string id)
     {
         surface.EndEditing(); if (surface.HasPendingText) return;
-        sectionId = id; var section = session.FindSection(id); if (section is null) return;
+        var section = session.FindSection(id); if (section is null) return;
         var page = section.Pages.FirstOrDefault() ?? session.AddPage(id); Navigate(page.Id);
     }
     private async void Invoke(string command, string? entityId = null)

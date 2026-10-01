@@ -40,6 +40,8 @@ public sealed partial class WorkspaceView
         AddShortcut(VirtualKey.PageUp, VirtualKeyModifiers.Control, "previous-page");
         AddShortcut(VirtualKey.PageDown, VirtualKeyModifiers.Control, "next-page");
         AddShortcut(VirtualKey.E, VirtualKeyModifiers.Control, "search");
+        AddShortcut(VirtualKey.F1, VirtualKeyModifiers.Control, "collapse-ribbon");
+        AddShortcut(VirtualKey.F10, VirtualKeyModifiers.Menu, "focus-selection-toolbar");
     }
     private void ResizePane(int column, PaneResizeChange change)
     {
@@ -91,6 +93,8 @@ public sealed partial class WorkspaceView
     }
     private void UpdateNavigationButtons()
     {
+        ribbon.SetSimplified(session.Document.Settings.Navigation.SimplifiedRibbon);
+        surface.SelectionToolbarEnabled = session.Document.Settings.Navigation.ShowSelectionToolbar;
         var back = navigationHistory.Peek(-1, PageExists) is not null;
         var forward = navigationHistory.Peek(1, PageExists) is not null;
         if (backButton is not null) backButton.IsEnabled = back;
@@ -98,6 +102,7 @@ public sealed partial class WorkspaceView
         ribbon.SetCommandState("page-back", false, back); ribbon.SetCommandState("page-forward", false, forward);
         ribbon.SetCommandState("page-previews", session.Document.Settings.Navigation.ShowPagePreviews);
         ribbon.SetCommandState("page-dates", session.Document.Settings.Navigation.ShowPageDates);
+        ribbon.SetCommandState("selection-toolbar", session.Document.Settings.Navigation.ShowSelectionToolbar);
     }
     private void RefreshPagePresentation()
     {
@@ -118,6 +123,13 @@ public sealed partial class WorkspaceView
         var options = session.Document.Settings.Navigation;
         switch (command)
         {
+            case "simplified-ribbon":
+                options.SimplifiedRibbon = !options.SimplifiedRibbon;
+                ribbon.SetSimplified(options.SimplifiedRibbon); ApplyLayout(); MarkDirty(); return true;
+            case "selection-toolbar":
+                options.ShowSelectionToolbar = !options.ShowSelectionToolbar;
+                surface.SelectionToolbarEnabled = options.ShowSelectionToolbar; UpdateNavigationButtons(); MarkDirty(); return true;
+            case "focus-selection-toolbar": surface.ShowSelectionToolbar(true); return true;
             case "page-back": BrowseHistory(-1); return true;
             case "page-forward": BrowseHistory(1); return true;
             case "previous-page": case "next-page":

@@ -63,6 +63,7 @@ public sealed partial class NoteSurface : Grid, IDisposable
         Background = OfficeTheme.Brush(0xFFFFFFFF);
         Children.Add(canvas); Children.Add(overlay);
         ConfigureInput();
+        ConfigureSelectionToolbar();
         caretTimer.Tick += (_, _) => {
             if (richVisual is null || editor?.FocusState == FocusState.Unfocused) { caretTimer.Stop(); return; }
             richVisual.CaretVisible = !richVisual.CaretVisible; canvas.Invalidate();
@@ -81,7 +82,7 @@ public sealed partial class NoteSurface : Grid, IDisposable
     {
         if (disposed) return;
         canvas.Page = Page; canvas.Options.ContentRevision = session?.Document.Revision;
-        canvas.Options.SelectedId = SelectedBlockId; canvas.Options.SelectedCell = SelectedTableCell; PositionEditor(); canvas.Invalidate();
+        canvas.Options.SelectedId = SelectedBlockId; canvas.Options.SelectedCell = SelectedTableCell; PositionEditor(); UpdateSelectionToolbar(); canvas.Invalidate();
     }
     public void NavigateToPage(string pageId, string? blockId = null)
     {

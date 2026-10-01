@@ -112,6 +112,8 @@ public sealed partial class WorkspaceView
         if (!ready) return;
         var state = new RuntimeState
         {
+            SimplifiedRibbon = ribbon.Simplified, RibbonOverflowCount = ribbon.OverflowCommandCount, CompactRebuilds = ribbon.CompactRebuilds,
+            SelectionToolbarVisible = surface.IsSelectionToolbarVisible, SelectionToolbarX = surface.SelectionToolbarBounds.X, SelectionToolbarY = surface.SelectionToolbarBounds.Y,
             NotebookPaneWidth = body.ColumnDefinitions[0].Width.Value, PagePaneWidth = body.ColumnDefinitions[1].Width.Value,
             SearchPaneWidth = body.ColumnDefinitions[3].Width.Value, SearchOpen = searchOpen,
             PageSort = session.Document.Settings.Navigation.PageSort.ToString(), PagePreviews = session.Document.Settings.Navigation.ShowPagePreviews,
@@ -141,6 +143,12 @@ public sealed partial class WorkspaceView
 
 internal sealed class RuntimeState
 {
+    public bool SimplifiedRibbon { get; set; }
+    public int RibbonOverflowCount { get; set; }
+    public long CompactRebuilds { get; set; }
+    public bool SelectionToolbarVisible { get; set; }
+    public float SelectionToolbarX { get; set; }
+    public float SelectionToolbarY { get; set; }
     public double NotebookPaneWidth { get; set; }
     public double PagePaneWidth { get; set; }
     public double SearchPaneWidth { get; set; }
