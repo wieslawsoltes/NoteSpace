@@ -53,7 +53,9 @@ public sealed partial class NoteSurface
         // the shared-layout caret so native candidate windows have an anchor.
         box.TextWrapping = TextWrapping.NoWrap; box.IsHitTestVisible = false;
         box.Opacity = 0; box.Padding = new Thickness(0); box.BorderThickness = new Thickness(0);
-        box.MinWidth = 1; box.MinHeight = 1; box.IsTabStop = false;
+        // WinUI/Uno requires IsTabStop even for programmatic Focus. Suppress Tab
+        // traversal in HandleRichKey, not by making the input adapter unfocusable.
+        box.MinWidth = 1; box.MinHeight = 1; box.IsTabStop = true;
         box.Foreground = OfficeTheme.Brush(0); box.Background = OfficeTheme.Brush(0);
         box.SelectionChanged += (_, _) => {
             if (editor != box || richDraft is null || syncingRichSelection || switchingCell || pendingRichKeys > 0) return;
