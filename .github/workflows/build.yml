@@ -26,6 +26,7 @@ jobs:
             src/
             tests/
             docs/
+            build/
             .github/
             global.json
             Directory.Build.props

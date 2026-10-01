@@ -34,7 +34,7 @@ Right-click notebooks, sections, groups or pages for organization actions. A pag
 
 For tables, double-click a cell and type. Tab/Shift+Tab move between cells; Enter/Shift+Enter move by row; the final forward cell appends a row. Ctrl+Enter remains available for multiline input. **Table** contains structural operations and quoted TSV copy/paste, preserving embedded tabs/newlines/quotes. Cells remain plain text with uniform row height and equal column widths; merged/rich cells are not implemented.
 
-Inside native text editors, normal operating-system selection and clipboard shortcuts apply. Ribbon Copy/Paste transfers note containers within the current session. An empty formatting selection applies to the whole text container, not only subsequent typing. Mixed-range styles are retained, but the native input overlay displays the base style; final rich formatting is drawn on the Skia surface.
+Text notes use live Skia-rendered mixed formatting with shared caret and selection geometry. Character commands affect the selected range; at a caret they set the style for future typing without changing existing text. Ribbon Copy/Paste preserves selected rich fragments within the session, or transfers note containers outside text editing. Native clipboard shortcuts transfer plain text. The **Layout** tab adds superscript/subscript, format copying, indentation, spacing, tab intervals, and container size/position/order. Paragraph settings apply to the whole container. See [live editing and layout](docs/wysiwyg.md) for keyboard behavior, reusable APIs and remaining limitations.
 
 ### Search and replace
 
@@ -311,7 +311,7 @@ Validation covers schema, global identities/references, finite geometry, ranges 
 
 This preview does **not** establish full OneNote feature, visual, accessibility, performance or file-format parity. Remaining areas include `.one`/`.onepkg`, Microsoft 365/OneDrive and authenticated collaboration, automatic merging/CRDTs, OCR and handwriting recognition, ink-to-math, equations, audio/video/transcription, web clipping, Outlook integration, protected sections and advanced printing.
 
-Styled in-place rich text, full bidirectional/script shaping and qualified font fallback remain work. Browser preview uses packaged Open Sans aliases for common families, not Microsoft fonts or exact font equivalence. Tables do not support merged/rich cells or variable row/column sizing. Desktop platform file-picker workflows and larger/hardware-specific datasets need further qualification.
+Live mixed-style text editing is implemented; independently formatted paragraphs, full bidirectional/script shaping, qualified font fallback, IME presentation and touch/screen-reader rich-text interaction remain work. Browser preview uses packaged Open Sans aliases for common families, not Microsoft fonts or exact font equivalence. Tables do not support merged/rich cells or variable row/column sizing. Desktop platform file-picker workflows and larger/hardware-specific datasets need further qualification.
 
 Markdown import supports basic paragraphs, headings and task prefixes. HTML/Markdown exports flatten placement and omit ink; PNG preserves rendered appearance, and `.notespace` preserves the implemented model. Unsupported OneNote content cannot be promised lossless conversion.
 

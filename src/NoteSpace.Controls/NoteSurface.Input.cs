@@ -38,6 +38,11 @@ public sealed partial class NoteSurface
         canvas.DoubleTapped += (_, e) => {
             if (Tool is not (DrawingTool.Select or DrawingTool.Text) || Page is null) return;
             var p = World(e.GetPosition(canvas));
+            if (richDraft is not null && richDraft.Block.Bounds.Contains(p.X, p.Y))
+            {
+                var b = richDraft.Block; richDraft.SelectWord(Renderer.HitTestText(b, p.X - b.X, p.Y - b.Y));
+                SetRichSelection(richDraft.Anchor, richDraft.Caret); editor?.Focus(FocusState.Programmatic); e.Handled = true; return;
+            }
             if (p.Y < 95) BeginEditTitle(); else if (Hit(p) is { } block) { if (NoteTable.HitTest(block, p.X, p.Y) is { } cell) BeginEditTableCell(block, cell); else BeginEdit(block); } else if (p.Y >= 120) NewText(p.X, p.Y);
             e.Handled = true;
         };
@@ -66,6 +71,15 @@ public sealed partial class NoteSurface
         if (Page is null || session is null || activePointer is not null) return;
         var current = e.GetCurrentPoint(canvas); var p = World(current.Position, current.Properties.Pressure);
         if (current.Properties.IsRightButtonPressed) { SelectBlock(Hit(p)?.Id); e.Handled = true; return; }
+        if (richDraft is { } draft && (Tool is DrawingTool.Select or DrawingTool.Text)
+            && !current.Properties.IsMiddleButtonPressed && !space
+            && draft.Block.Bounds.Contains(p.X, p.Y) && p.Y >= draft.Block.Y + 4
+            && !(p.X > draft.Block.X + draft.Block.Width - 14 && p.Y > draft.Block.Y + draft.Block.Height - 14))
+        {
+            var at = Renderer.HitTestText(draft.Block, p.X - draft.Block.X, p.Y - draft.Block.Y);
+            SetRichSelection(shift ? draft.Anchor : at, at); editor?.Focus(FocusState.Programmatic);
+            gesture = 6; activePointer = e.Pointer.PointerId; canvas.CapturePointer(e.Pointer); e.Handled = true; return;
+        }
         EndEditing(); if (pendingText) return;
         if (current.Properties.IsMiddleButtonPressed || space)
         {
@@ -107,7 +121,14 @@ public sealed partial class NoteSurface
         {
             var hover = Hit(p)?.Id; if (hover != canvas.Options.HoverId) { canvas.Options.HoverId = hover; canvas.Invalidate(); } return;
         }
-        if (gesture == 1 && drawing is not null)
+        if (gesture == 6 && richDraft is { } rich)
+        {
+            if (current.Position.Y < 0) canvas.Options.OffsetY = Math.Max(0, canvas.Options.OffsetY - 16 / Zoom);
+            else if (current.Position.Y > ActualHeight) canvas.Options.OffsetY = Math.Min(100000, canvas.Options.OffsetY + 16 / Zoom);
+            p = World(current.Position, current.Properties.Pressure);
+            SetRichSelection(rich.Anchor, Renderer.HitTestText(rich.Block, p.X - rich.Block.X, p.Y - rich.Block.Y));
+        }
+        else if (gesture == 1 && drawing is not null)
         {
             if (drawing.Tool is DrawingTool.Rectangle or DrawingTool.Ellipse or DrawingTool.Line)
             {

@@ -38,7 +38,7 @@ public sealed partial class NoteSurface : Grid, IDisposable
     public float PenWidth { get; set; } = 3;
     public float Zoom => canvas.Options.Zoom;
     public bool Dark { get => canvas.Options.Dark; set { canvas.Options.Dark = value; Refresh(); } }
-    public bool HasPendingText => pendingText || editor is not null && editor.Text != committedText;
+    public bool HasPendingText => pendingText || richDraft is not null && richDraft.Version != committedRichVersion || editor is not null && editor.Text != committedText;
     public PageRenderer Renderer => canvas.Renderer;
     public EditorSession? Session
     {
@@ -56,12 +56,17 @@ public sealed partial class NoteSurface : Grid, IDisposable
         Background = OfficeTheme.Brush(0xFFFFFFFF);
         Children.Add(canvas); Children.Add(overlay);
         ConfigureInput();
+        caretTimer.Tick += (_, _) => {
+            if (richVisual is null || editor?.FocusState == FocusState.Unfocused) { caretTimer.Stop(); return; }
+            richVisual.CaretVisible = !richVisual.CaretVisible; canvas.Invalidate();
+        };
         SizeChanged += (_, _) => { PositionEditor(); canvas.Invalidate(); };
         typingTimer.Tick += (_, _) => { typingTimer.Stop(); FlushPendingText(); };
     }
     private void SessionChanged(object? sender, DocumentChange change)
     {
         if (editingPageId is not null && (Page?.Id != editingPageId || (!editingTitle && !Page.Blocks.Any(b => b.Id == editingBlockId)))) CancelEditor();
+        ReconcileRichDocument();
         if (SelectedBlockId is not null && SelectedBlock is null) SelectedBlockId = null;
         Refresh();
     }
@@ -107,17 +112,25 @@ public sealed partial class NoteSurface : Grid, IDisposable
     public void CopySelected(bool cut = false)
     {
         FlushPendingText(); if (pendingText || SelectedBlock is not { } block) return;
-        copiedBlock = DocumentJson.CloneBlock(block); if (cut) DeleteSelected();
+        if (richDraft is not null)
+        {
+            if (richDraft.SelectionLength == 0) return;
+            copiedText = richDraft.CopySelection();
+            if (cut) { richDraft.ReplaceSelection(""); SyncRichInput(); }
+            FocusTextEditor(); return;
+        }
+        copiedText = null; copiedBlock = DocumentJson.CloneBlock(block); if (cut) DeleteSelected();
     }
     public bool PasteSelected()
     {
+        if (richDraft is not null && copiedText is not null) { richDraft.Paste(copiedText); SyncRichInput(); FocusTextEditor(); return true; }
         if (copiedBlock is null || Page is null) return false;
         var block = DocumentJson.CloneBlock(copiedBlock); block.Id = Ids.New(); block.X = Math.Min(99000, block.X + 24); block.Y = Math.Min(99000, block.Y + 24);
         InsertBlock(block); copiedBlock = DocumentJson.CloneBlock(block); return true;
     }
     public void Dispose()
     {
-        if (disposed) return; EndEditing(); disposed = true; typingTimer.Stop();
+        if (disposed) return; EndEditing(); disposed = true; typingTimer.Stop(); caretTimer.Stop();
         if (session is not null) session.Changed -= SessionChanged; canvas.Dispose();
     }
 }

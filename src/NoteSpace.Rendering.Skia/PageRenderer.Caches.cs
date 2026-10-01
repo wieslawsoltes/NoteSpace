@@ -51,13 +51,14 @@ public sealed partial class PageRenderer
     }
     private SKFont Font(TextFormat format)
     {
-        var key = new FontKey(format.FontFamily, format.FontSize, format.Bold, format.Italic);
+        var size = format.FontSize * (format.Baseline == 0 ? 1 : 0.7f);
+        var key = new FontKey(format.FontFamily, size, format.Bold, format.Italic);
         if (fonts.TryGetValue(key, out var cached)) { fonts[key] = (cached.Font, ++useClock); return cached.Font; }
         if (fonts.Count >= 256)
         {
             var oldest = fonts.MinBy(x => x.Value.Used); oldest.Value.Font.Dispose(); fonts.Remove(oldest.Key);
         }
-        var font = new SKFont(Face(format), format.FontSize);
+        var font = new SKFont(Face(format), size);
         fonts.Add(key, (font, ++useClock)); Statistics.FontBuilds++; return font;
     }
     private void ClearFonts() { foreach (var font in fonts.Values) font.Font.Dispose(); fonts.Clear(); }

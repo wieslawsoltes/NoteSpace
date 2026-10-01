@@ -12,9 +12,18 @@ internal sealed class NoteInputBox : TextBox
     private bool suppressNavigationText;
     public Func<KeyRoutedEventArgs, bool>? HandleKey { get; set; }
     public NoteInputBox() => BeforeTextChanging += (_, e) => { if (suppressNavigationText) e.Cancel = true; };
+    // Buffered host edits may be drained during another key dispatch. Permit
+    // that explicit projection without permitting the native key's text write.
+    internal void SetHostText(string text, int start, int length)
+    {
+        var suppress = suppressNavigationText;
+        suppressNavigationText = false;
+        try { Text = text; Select(start, length); }
+        finally { suppressNavigationText = suppress; }
+    }
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (e.Key is VirtualKey.Tab or VirtualKey.Enter)
+        if (e.Key is VirtualKey.Tab or VirtualKey.Enter or VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down or VirtualKey.Home or VirtualKey.End or VirtualKey.PageUp or VirtualKey.PageDown or VirtualKey.Back or VirtualKey.Delete)
         {
             suppressNavigationText = true;
             // Queue before the host's navigation callback so changing to the next

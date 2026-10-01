@@ -103,6 +103,27 @@ public static partial class RichText
         ReplaceMatches(block, [(start, length)], value);
     }
 
+    /// <summary>Insert explicitly formatted typing without flattening surrounding runs.</summary>
+    public static void ReplaceRange(NoteBlock block, int start, int length, string value, TextFormat typingFormat, string? link = null)
+    {
+        ArgumentNullException.ThrowIfNull(value); ArgumentNullException.ThrowIfNull(typingFormat);
+        CheckRange(block.Text, start, length);
+        if (length == 0 && value.Length == 0) return;
+        ReplaceMatches(block, [(start, length)], value, Copy(typingFormat), link);
+    }
+
+    public static TextFormat CloneStyle(TextFormat format) => Copy(format);
+
+    public static void CopyStyle(TextFormat source, TextFormat target)
+    {
+        ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(target);
+        target.FontFamily = source.FontFamily; target.FontSize = source.FontSize;
+        target.Bold = source.Bold; target.Italic = source.Italic; target.Underline = source.Underline;
+        target.Strike = source.Strike; target.Baseline = source.Baseline;
+        target.Color = source.Color; target.Highlight = source.Highlight;
+        target.Alignment = source.Alignment; target.Bullets = source.Bullets; target.Numbered = source.Numbered;
+    }
+
     /// <summary>Replace non-overlapping ordinal matches in one text/run pass, retaining
     /// styles between matches rather than treating them as one large replacement.</summary>
     public static int ReplaceAll(NoteBlock block, string find, string replacement, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
@@ -119,7 +140,7 @@ public static partial class RichText
         return matches.Count;
     }
 
-    private static void ReplaceMatches(NoteBlock block, IReadOnlyList<(int Start, int Length)> matches, string replacement)
+    private static void ReplaceMatches(NoteBlock block, IReadOnlyList<(int Start, int Length)> matches, string replacement, TextFormat? typingFormat = null, string? typingLink = null)
     {
         long length = block.Text.Length;
         foreach (var match in matches) length += replacement.Length - (long)match.Length;
@@ -146,7 +167,7 @@ public static partial class RichText
             var link = inherited?.Link;
             if (match.Length == 0 && inherited is not null && (match.Start == inherited.Start || match.Start == inherited.End)) link = null;
             var at = text.Length; text.Append(replacement);
-            Append(output, new(at, replacement.Length, inherited?.Format ?? block.Format, link));
+            Append(output, new(at, replacement.Length, typingFormat ?? inherited?.Format ?? block.Format, typingFormat is not null ? typingLink : link));
             consumed = match.Start + match.Length;
         }
         Original(consumed, block.Text.Length);
@@ -174,6 +195,6 @@ public static partial class RichText
         if (result.Count > 10000) throw new InvalidDataException("Formatting exceeds the 10,000-run container limit.");
         return result;
     }
-    private static bool Same(TextFormat a, TextFormat b) => a.FontFamily == b.FontFamily && a.FontSize == b.FontSize && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strike == b.Strike && a.Color == b.Color && a.Highlight == b.Highlight && a.Alignment == b.Alignment && a.Bullets == b.Bullets && a.Numbered == b.Numbered;
-    private static TextFormat Copy(TextFormat f) => new() { FontFamily = f.FontFamily, FontSize = f.FontSize, Bold = f.Bold, Italic = f.Italic, Underline = f.Underline, Strike = f.Strike, Color = f.Color, Highlight = f.Highlight, Alignment = f.Alignment, Bullets = f.Bullets, Numbered = f.Numbered };
+    private static bool Same(TextFormat a, TextFormat b) => a.FontFamily == b.FontFamily && a.FontSize == b.FontSize && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strike == b.Strike && a.Baseline == b.Baseline && a.Color == b.Color && a.Highlight == b.Highlight && a.Alignment == b.Alignment && a.Bullets == b.Bullets && a.Numbered == b.Numbered;
+    private static TextFormat Copy(TextFormat f) => new() { FontFamily = f.FontFamily, FontSize = f.FontSize, Bold = f.Bold, Italic = f.Italic, Underline = f.Underline, Strike = f.Strike, Baseline = f.Baseline, Color = f.Color, Highlight = f.Highlight, Alignment = f.Alignment, Bullets = f.Bullets, Numbered = f.Numbered };
 }

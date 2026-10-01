@@ -52,6 +52,19 @@ public sealed class PlatformServices
         if (file is not null) await Windows.Storage.FileIO.WriteBytesAsync(file, bytes);
 #endif
     }
+    public void BindFormatShortcuts(Func<bool> copy, Func<bool> paste)
+    {
+        ArgumentNullException.ThrowIfNull(copy); ArgumentNullException.ThrowIfNull(paste);
+#if BROWSER_WASM
+        BrowserBridge.BindFormatShortcuts(copy, paste);
+#endif
+    }
+    public void ClearFormatShortcuts()
+    {
+#if BROWSER_WASM
+        BrowserBridge.ClearFormatShortcuts();
+#endif
+    }
     public void Report(string json)
     {
 #if BROWSER_WASM
@@ -63,6 +76,12 @@ public sealed class PlatformServices
 #if BROWSER_WASM
 internal static partial class BrowserBridge
 {
+    [JSImport("globalThis.NoteSpaceHost.bindFormatShortcuts")]
+    internal static partial void BindFormatShortcuts(
+        [JSMarshalAs<JSType.Function<JSType.Boolean>>] Func<bool> copy,
+        [JSMarshalAs<JSType.Function<JSType.Boolean>>] Func<bool> paste);
+    [JSImport("globalThis.NoteSpaceHost.clearFormatShortcuts")]
+    internal static partial void ClearFormatShortcuts();
     [JSImport("globalThis.NoteSpaceHost.load")]
     [return: JSMarshalAs<JSType.Promise<JSType.String>>]
     internal static partial Task<string> Load();

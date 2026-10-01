@@ -21,6 +21,19 @@
     // focus before keyup. Uno's semantic/native button bridge must not interpret
     // that unmatched release as activation of the newly focused toolbar button.
     // Store element identities only; no typed text or keystroke log is retained.
+    // Uno's native input owns Ctrl+C/V and stops their propagation, even with
+    // Shift held. Give the active editor first refusal for format-only shortcuts.
+    // A declined callback leaves dialogs, other fields and ordinary paste intact.
+    let copyFormatShortcut, pasteFormatShortcut;
+    globalThis.addEventListener("keydown", event => {
+        const target = event.target;
+        const nativeInput = (target?.id === "uno-input" || target?.id?.startsWith("uno-semantics-"))
+            && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+        if (!nativeInput || !event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey || event.isComposing) return;
+        const key = event.key?.toLowerCase();
+        const handler = key === "c" ? copyFormatShortcut : key === "v" ? pasteFormatShortcut : undefined;
+        if (handler?.() === true) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }, true);
     const activationOrigins = new Map();
     const activationKey = key => key === "Enter" || key === " ";
     globalThis.addEventListener("keydown", event => {
@@ -53,6 +66,11 @@
         };
     });
     globalThis.NoteSpaceHost = Object.freeze({
+        bindFormatShortcuts(copy, paste) {
+            if (typeof copy !== "function" || typeof paste !== "function") throw new TypeError("Format shortcut callbacks are required.");
+            copyFormatShortcut = copy; pasteFormatShortcut = paste;
+        },
+        clearFormatShortcuts() { copyFormatShortcut = undefined; pasteFormatShortcut = undefined; },
         async load() {
             const db = await database();
             return new Promise((resolve, reject) => {
