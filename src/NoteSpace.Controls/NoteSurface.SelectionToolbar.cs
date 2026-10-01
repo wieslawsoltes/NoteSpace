@@ -11,6 +11,7 @@ public sealed partial class NoteSurface
 {
     private readonly SelectionToolbar selectionToolbar = new() { Visibility = Visibility.Collapsed };
     private bool selectionToolbarEnabled = true;
+    public bool IsTextEditorFocused => editor is not null && editor.FocusState != FocusState.Unfocused;
     private string? toolbarBlockId;
     public bool SelectionToolbarEnabled
     {
@@ -30,11 +31,13 @@ public sealed partial class NoteSurface
             UpdateSelectionToolbar();
         };
         selectionToolbar.DismissRequested += (_, _) => { HideSelectionToolbar(); FocusTextEditor(); };
-        // Show only after pointer selection, not while dragging or during ordinary typing.
-        canvas.PointerPressed += (_, _) => HideSelectionToolbar();
-        canvas.PointerReleased += (_, _) => { if (richDraft?.SelectionLength > 0) ShowSelectionToolbar(); };
-        canvas.DoubleTapped += (_, _) => { if (richDraft?.SelectionLength > 0) ShowSelectionToolbar(); };
-        canvas.PointerWheelChanged += (_, _) => HideSelectionToolbar();
+        // The editor handles selection gestures first. Observe handled routed
+        // events too, so the toolbar appears after selection without changing
+        // the pointer-capture or editing logic.
+        canvas.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => HideSelectionToolbar()), true);
+        canvas.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, _) => { if (richDraft?.SelectionLength > 0) ShowSelectionToolbar(); }), true);
+        canvas.AddHandler(UIElement.DoubleTappedEvent, new DoubleTappedEventHandler((_, _) => { if (richDraft?.SelectionLength > 0) ShowSelectionToolbar(); }), true);
+        canvas.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, _) => HideSelectionToolbar()), true);
         DraftChanged += (_, _) => HideSelectionToolbar();
         SelectionChanged += (_, _) => UpdateSelectionToolbar();
         LostFocus += (_, _) => DispatcherQueue.TryEnqueue(() => {

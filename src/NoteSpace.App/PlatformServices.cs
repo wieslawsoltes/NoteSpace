@@ -63,6 +63,20 @@ public sealed class PlatformServices
     {
 #if BROWSER_WASM
         BrowserBridge.ClearFormatShortcuts();
+        BrowserBridge.ClearEditorShortcuts();
+#endif
+    }
+    public void BindEditorShortcuts(Func<string, bool> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+#if BROWSER_WASM
+        BrowserBridge.BindEditorShortcuts(handler);
+#endif
+    }
+    public void ClearEditorShortcuts()
+    {
+#if BROWSER_WASM
+        BrowserBridge.ClearEditorShortcuts();
 #endif
     }
     public void Report(string json)
@@ -82,6 +96,10 @@ internal static partial class BrowserBridge
         [JSMarshalAs<JSType.Function<JSType.Boolean>>] Func<bool> paste);
     [JSImport("globalThis.NoteSpaceHost.clearFormatShortcuts")]
     internal static partial void ClearFormatShortcuts();
+    [JSImport("globalThis.NoteSpaceHost.bindEditorShortcuts")]
+    internal static partial void BindEditorShortcuts([JSMarshalAs<JSType.Function<JSType.String, JSType.Boolean>>] Func<string, bool> handler);
+    [JSImport("globalThis.NoteSpaceHost.clearEditorShortcuts")]
+    internal static partial void ClearEditorShortcuts();
     [JSImport("globalThis.NoteSpaceHost.load")]
     [return: JSMarshalAs<JSType.Promise<JSType.String>>]
     internal static partial Task<string> Load();

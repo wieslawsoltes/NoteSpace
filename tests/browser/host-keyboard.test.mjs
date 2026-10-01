@@ -84,3 +84,30 @@ test('Clearing the host releases callbacks and restores native shortcut behavior
     const send = adapter(); send.host.bindFormatShortcuts(() => true, () => true); send.host.clearFormatShortcuts();
     assert.equal(send('keydown', input(), 'V', false, formatChord).stopped, false);
 });
+
+const shellChords = [
+    ['ArrowLeft', { altKey: true }, 'page-back'], ['ArrowRight', { altKey: true }, 'page-forward'],
+    ['PageUp', { ctrlKey: true }, 'previous-page'], ['PageDown', { ctrlKey: true }, 'next-page'],
+    ['F10', { altKey: true }, 'focus-selection-toolbar'], ['F1', { ctrlKey: true }, 'collapse-ribbon']
+];
+test('Native shell shortcuts route once without default text or browser navigation', () => {
+    const send = adapter(); const calls = []; send.host.bindEditorShortcuts(command => { calls.push(command); return true; });
+    for (const [key, modifiers] of shellChords) { const event = send('keydown', input(), key, false, modifiers); assert.ok(event.stopped && event.prevented); }
+    assert.deepEqual(calls, shellChords.map(c => c[2]));
+});
+test('Native shell shortcut interception preserves other controls composition and modifier chords', () => {
+    const send = adapter(); let calls = 0; send.host.bindEditorShortcuts(() => { calls++; return true; });
+    for (const [key, modifiers] of shellChords) {
+        for (const extra of [{ isComposing: true }, { shiftKey: true }, { metaKey: true }, { ctrlKey: true, altKey: true }])
+            assert.equal(send('keydown', input(), key, false, { ...modifiers, ...extra }).stopped, false);
+        assert.equal(send('keydown', button(), key, false, modifiers).stopped, false);
+        assert.equal(send('keydown', { id: 'unrelated', tagName: 'TEXTAREA' }, key, false, modifiers).stopped, false);
+    }
+    assert.equal(calls, 0);
+});
+test('Dialogs can decline shell shortcuts and disposal releases the callback', () => {
+    const send = adapter(); send.host.bindEditorShortcuts(() => false);
+    assert.equal(send('keydown', input(), 'ArrowLeft', false, { altKey: true }).stopped, false);
+    send.host.bindEditorShortcuts(() => true); send.host.clearEditorShortcuts();
+    assert.equal(send('keydown', input(), 'ArrowLeft', false, { altKey: true }).stopped, false);
+});

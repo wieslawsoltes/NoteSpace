@@ -34,6 +34,24 @@
         const handler = key === "c" ? copyFormatShortcut : key === "v" ? pasteFormatShortcut : undefined;
         if (handler?.() === true) { event.preventDefault(); event.stopImmediatePropagation(); }
     }, true);
+    // TextBox may consume shell-navigation keys before root accelerators. Limit
+    // interception to Uno's focused native input; the managed host can decline
+    // in dialogs, other fields, composition, or after disposal.
+    let editorShortcut;
+    globalThis.addEventListener("keydown", event => {
+        const target = event.target;
+        const nativeInput = (target?.id === "uno-input" || target?.id?.startsWith("uno-semantics-"))
+            && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+        if (!nativeInput || event.shiftKey || event.metaKey || event.isComposing) return;
+        let command;
+        if (event.altKey && !event.ctrlKey)
+            command = event.key === "ArrowLeft" ? "page-back" : event.key === "ArrowRight" ? "page-forward"
+                : event.key === "F10" ? "focus-selection-toolbar" : undefined;
+        else if (event.ctrlKey && !event.altKey)
+            command = event.key === "PageUp" ? "previous-page" : event.key === "PageDown" ? "next-page"
+                : event.key === "F1" ? "collapse-ribbon" : undefined;
+        if (command && editorShortcut?.(command) === true) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }, true);
     const activationOrigins = new Map();
     const activationKey = key => key === "Enter" || key === " ";
     globalThis.addEventListener("keydown", event => {
@@ -71,6 +89,11 @@
             copyFormatShortcut = copy; pasteFormatShortcut = paste;
         },
         clearFormatShortcuts() { copyFormatShortcut = undefined; pasteFormatShortcut = undefined; },
+        bindEditorShortcuts(handler) {
+            if (typeof handler !== "function") throw new TypeError("Editor shortcut callback is required.");
+            editorShortcut = handler;
+        },
+        clearEditorShortcuts() { editorShortcut = undefined; },
         async load() {
             const db = await database();
             return new Promise((resolve, reject) => {

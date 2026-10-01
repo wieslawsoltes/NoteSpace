@@ -89,6 +89,17 @@ public sealed partial class NoteSurface
         box.TextChanged += (_, _) => { if (editor == box) PositionEditor(); };
         box.HandleKey = e => {
             if (editor != box) return false;
+            // Native desktop TextBox handling can consume arrows before a root
+            // accelerator sees them. Route exact shell chords once, before that.
+            var alt = e.KeyStatus.IsMenuKeyDown || (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu) & CoreVirtualKeyStates.Down) != 0;
+            var ctrl = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
+            var shift = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
+            var shellCommand = !shift && alt && !ctrl ? e.Key switch {
+                VirtualKey.Left => "page-back", VirtualKey.Right => "page-forward", VirtualKey.F10 => "focus-selection-toolbar", _ => null
+            } : !shift && ctrl && !alt ? e.Key switch {
+                VirtualKey.PageUp => "previous-page", VirtualKey.PageDown => "next-page", VirtualKey.F1 => "collapse-ribbon", _ => null
+            } : null;
+            if (shellCommand is not null) { DrainRichKeys(); CommandRequested?.Invoke(this, new(shellCommand)); return true; }
             if (HandleRichKey(e)) return true;
             var backwards = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
             var controlDown = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;

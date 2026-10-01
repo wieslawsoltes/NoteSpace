@@ -17,6 +17,12 @@ public sealed partial class WorkspaceView
     private OfficeButton? backButton, forwardButton;
     private string? displayedPageId;
     private double? previewNotebookWidth, previewPageWidth, previewSearchWidth;
+    private bool HandleNativeEditorShortcut(string command)
+    {
+        if (!ready || disposed || dialogGate.CurrentCount == 0 || !surface.IsTextEditorFocused) return false;
+        if (command is not ("page-back" or "page-forward" or "previous-page" or "next-page" or "focus-selection-toolbar" or "collapse-ribbon")) return false;
+        Invoke(command); return true;
+    }
     private void ToggleNavigationPane()
     {
         if (compactLayout && searchOpen) { searchOpen = false; navigationOpen = true; }
@@ -26,6 +32,7 @@ public sealed partial class WorkspaceView
     private bool PageExists(string id) => session.FindPage(id) is not null;
     private void ConfigureNavigation()
     {
+        platform.BindEditorShortcuts(HandleNativeEditorShortcut);
         foreach (var (edge, column, id, label) in new[] {
             (notebookEdge, 0, "resize-notebooks", "Resize notebook pane"), (pageEdge, 1, "resize-pages", "Resize page pane"), (searchEdge, 3, "resize-search", "Resize search pane") })
         {
