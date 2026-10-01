@@ -50,6 +50,7 @@ public sealed class RibbonControl : UserControl
     private readonly Dictionary<string, (bool Selected, bool Enabled)> commandStates = new();
     public void SetCommandState(string id, bool selected, bool enabled = true)
     {
+        if (commandStates.TryGetValue(id, out var previous) && previous == (selected, enabled)) return;
         commandStates[id] = (selected, enabled);
         if (commandButtons.TryGetValue(id, out var button)) { button.Selected = selected; button.IsEnabled = enabled; }
     }

@@ -117,7 +117,11 @@ public sealed partial class NoteSurface
     {
         if (richDraft is null || editor is null) return;
         switchingCell = true; syncingRichSelection = true;
-        try { editor.Text = richDraft.Block.Text; editor.Select(richDraft.SelectionStart, richDraft.SelectionLength); }
+        try
+        {
+            if (editor is NoteInputBox input) input.SetHostText(richDraft.Block.Text, richDraft.SelectionStart, richDraft.SelectionLength);
+            else { editor.Text = richDraft.Block.Text; editor.Select(richDraft.SelectionStart, richDraft.SelectionLength); }
+        }
         finally { switchingCell = false; syncingRichSelection = false; }
         pendingText = richDraft.Version != committedRichVersion;
         typingTimer.Stop(); if (pendingText) typingTimer.Start();

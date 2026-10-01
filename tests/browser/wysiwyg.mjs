@@ -95,6 +95,27 @@ export async function wysiwygWorkflows({ browser, output }) {
         await wait(() => globalThis.noteSpaceState?.ready && !globalThis.noteSpaceState.dirty); await settle();
         assert.deepEqual((await saved()).blocks[0], committed); tests.push('rich styles and layout survive reload');
         await page.screenshot({ path: resolve(output, 'wysiwyg-committed.png') });
+        stage = 'rapid-repeated-input';
+        await page.mouse.dblclick(800, 750, { delay: 100 }); await wait(() => globalThis.noteSpaceState.richTextEditing); await settle();
+        await page.keyboard.type('aaaa');
+        // Deliberately do not insert frame waits between commands. A dispatcher
+        // backlog must not reorder the selected offset, typing style or text.
+        await page.keyboard.press('Control+Home'); await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('Control+b'); await page.keyboard.type('a'); await settle();
+        await wait(() => !globalThis.noteSpaceState.dirty);
+        b = (await saved()).blocks[1]; assert.equal(b.text, 'aaaaa');
+        assert.equal(styleAt(b, 1).bold, true); assert.equal(styleAt(b, 0).bold, false); assert.equal(styleAt(b, 2).bold, false);
+        tests.push('rapid repeated-character insertion preserves the actual styled offset');
+
+        stage = 'rapid-queued-text-projection';
+        await page.keyboard.press('Control+End'); await page.keyboard.press('Enter');
+        await page.keyboard.type('xy'); await page.keyboard.press('Backspace'); await page.keyboard.type('z');
+        await page.keyboard.press('Tab'); await page.keyboard.type('q'); await settle();
+        assert.equal(await text(), 'aaaaa\nxz\tq');
+        await page.keyboard.press('Escape'); await settle(); await wait(() => !globalThis.noteSpaceState.dirty);
+        assert.equal((await saved()).blocks[1].text, 'aaaaa\nxz\tq');
+        assert.deepEqual((await saved()).blocks[0], committed);
+        tests.push('rapid host navigation and native typing retain all text in order');
         assert.deepEqual(errors, []); await writeFile(resolve(output, 'wysiwyg-result.json'), JSON.stringify({ passed: true, tests }, null, 2));
         console.log(`PASS ${tests.length} WYSIWYG browser workflows`); return tests;
     } catch (error) {
